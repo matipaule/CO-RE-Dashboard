@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> CO-RE Dashboard - Gestión CO-RE </title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<header>
+    <div class="header-content">
+        <div class="logo">
+            <a href="#" onclick="navegarA('inicio'); return false;" style="text-decoration: none; color: inherit; cursor: pointer;">
+                Estudio<span> CO-RE</span>
+            </a>
+        </div>
+        <div class="menu-hamburguesa" id="menuToggle">&#9776;</div>
+    </div>
+    <nav id="menuNav">
+        <ul>
+            <li><a href="#" data-seccion="inicio" class="active">Inicio</a></li>
+            <li><a href="#" data-seccion="cuotas">Cuotas</a></li>
+            <li><a href="#" data-seccion="quitas">Quitas</a></li>
+            <li><a href="#" data-seccion="caja">Datos de pago</a></li>
+            <li><a href="#" data-seccion="estrategia">Estrategia</a></li>
+            <li><a href="#" data-seccion="faq">FAQ</a></li>
+        </ul>
+    </nav>
+</header>
+
+<main>
+    <div class="container">
+
+        <section id="inicio" class="pagina-activa card">
+            <div class="welcome-header">
+                <h1>Bienvenido a CO-RE Dashboard</h1>
+                <p>Gestión de Cobranzas Especializada </p>
+            </div>
+            <div class="grid-inicio">
+                <div class="card-acceso" onclick="navegarA('cuotas')">
+                    <span class="icon">📊</span>
+                    <h3>Calculadora</h3>
+                    <p>Refinanciar saldo en cuotas fijas.</p>
+                </div>
+                <div class="card-acceso" onclick="navegarA('quitas')">
+                    <span class="icon">💸</span>
+                    <h3>Campaña Quitas</h3>
+                    <p>Descuentos por pago único.</p>
+                </div>
+                <div class="card-acceso" onclick="navegarA('caja')">
+                    <span class="icon">🏦</span>
+                    <h3>Datos de Pago</h3>
+                    <p>CBU, Alias y CUIT.</p>
+                </div>
+                <div class="card-acceso" onclick="navegarA('estrategia')">
+                    <span class="icon">🧠</span>
+                    <h3>Estrategia</h3>
+                    <p>Políticas y tips de cierre.</p>
+                </div>
+                <div class="card-acceso" onclick="navegarA('faq')">
+                    <span class="icon">❓</span>
+                    <h3>FAQ</h3>
+                    <p>Dudas frecuentes de clientes.</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="cuotas" class="pagina-oculta card">
+            <h2>Cuantificación de Cuotas</h2>
+            <div class="input-container">
+                <label for="saldoInput">Ingrese Saldo CRM (Use coma para centavos)</label>
+                <div class="input-wrapper">
+                    <span class="currency-symbol">$</span>
+                    <input type="text" id="saldoInput" placeholder="150.000,00">
+                </div>
+
+                
+
+                <button onclick="calcularCuotas()" class="btn-main">Generar Planes</button>
+            </div>
+            <div id="resultadoHeader" class="resultado-header">
+                <p id="saldoRedondeado"></p>
+            </div>
+            <div class="table-responsive">
+                <table id="tablaCuotas">
+                    <thead>
+                        <tr>
+                            <th>Políticas</th>
+                            <th>Cuota Sugerida</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="quitas" class="pagina-oculta card">
+            <h2>Campaña de Quitas Autorizadas</h2>
+            <div class="input-container">
+                <label for="capitalInput">Saldo Capital (CRM)</label>
+                <div class="input-wrapper">
+                    <span class="currency-symbol">$</span>
+                    <input type="text" id="capitalInput" placeholder="0.000,00">
+                </div>
+
+                <label for="totalConInteresInput">Saldo Total Actual (Con intereses)</label>
+                <div class="input-wrapper">
+                    <span class="currency-symbol">$</span>
+                    <input type="text" id="totalConInteresInput" placeholder="0.000,00">
+                </div>
+                
+                <label for="moraInput">Días de Mora</label>
+                <div class="input-wrapper">
+                    <input type="number" id="moraInput" placeholder="Ej: 130">
+                </div>
+                
+                <button onclick="generarEscalaQuitas()" class="btn-main">Calcular Quitas</button>
+            </div>
+
+            <div id="infoEscala" class="resultado-header"></div>
+
+            <div class="table-responsive">
+                <table id="tablaQuitas">
+                    <thead>
+                        <tr>
+                            <th>Políticas</th>
+                            <th>% Quita</th>
+                            <th>Monto Final</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div id="contenedorSalto" style="display:none; margin-top: 25px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
+                <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 10px;">¿No acepta pago único?</p>
+                <button onclick="saltarACuotas()" class="btn-main" style="background: rgba(56, 189, 248, 0.1); color: var(--primary); border: 1px solid var(--primary);">
+                    Refinanciar sobre Total →
+                </button>
+            </div>
+        </section>
+
+        <section id="caja" class="pagina-oculta card">
+            <h2>🏦 Información de Pago</h2>
+            <div class="ayuda-item" style="border-left: 4px solid var(--primary);">
+                <div id="datosTransferenciaCompleto">
+                    <p><strong>Razón Social:</strong> ALAU TECNOLOGIA S.A.U.</p>
+                    <p><strong>CUIT:</strong> 30-71542170-0</p>
+                    <p><strong>CBU:</strong> 3840100200000004686158</p>
+                    <p><strong>Alias:</strong> UALEOMICUOTA</p>
+                </div>
+                <button class="btn-main" style="margin-top: 15px; width: 100%;" onclick="copiarTodoPago()">
+                    📋 Copiar Datos Completos
+                </button>
+            </div>
+        </section>
+
+        <section id="estrategia" class="pagina-oculta card">
+            <h2>Políticas de Gestión</h2>
+            <div class="ayuda-item" style="background: #161e2e; margin-bottom: 20px;">
+                <h3>📊 Límites de Cuotas</h3>
+                <ul class="lista-politicas">
+                    <li><strong>Hasta $1M:</strong> Max 12 cuotas.</li>
+                    <li><strong>$1M a $6M:</strong> Max 15 cuotas.</li>
+                    <li><strong>$6M a $20M:</strong> Max 18 cuotas.</li>
+                    <li><strong>+$20M:</strong> Max 36 cuotas.</li>
+                </ul>
+                <h3>📊 Quitas Máximas</h3>
+                <ul class="lista-politicas">
+                    <li><strong>30-90 días:</strong> 100% Int.</li>
+                    <li><strong>90-120 días:</strong> 100% Int. + 20% Cap.</li>
+                    <li><strong>120-150 días:</strong> 100% Int. + 30% Cap.</li>
+                    <li><strong>150-180 días:</strong> 100% Int. + 40% Cap.</li>
+                    <li><strong>+180 días:</strong> 100% Int. + 50% Cap.</li>
+                </ul>
+            </div>
+            <div class="ayuda-item">
+                <h3>💡 Tips de Cierre</h3>
+                <p><span class="dot crit"></span> <strong>Cuota Mínima:</strong> $50.000 (Sin excepción).</p>
+                <p><span class="dot rec"></span> <strong>Anclaje:</strong> Siempre empezar por la quita total.</p>
+                <p><strong>BCRA:</strong> Informar demora de 30-60 días en actualizar Veraz.</p>
+            </div>
+        </section>
+
+        <section id="faq" class="pagina-oculta card">
+            <h2>Preguntas Frecuentes</h2>
+            <div class="faq-container">
+                <div class="faq">
+                    <h4>¿Por qué no veo planes largos?</h4>
+                    <p>Se ocultan si la cuota baja de $50.000.</p>
+                </div>
+                <div class="faq">
+                    <h4>¿El Veraz se limpia inmediato?</h4>
+                    <p>No, tarda entre 30 y 60 días tras la cancelación total.</p>
+                </div>
+                <div class="faq">
+                    <h4>¿Qué pasa si me atraso en una cuota?</h4>
+                    <p>El plan cae y se reclama el total original con intereses.</p>
+                </div>
+            </div>
+        </section>
+
+    </div>
+</main>
+
+<script src="js/script.js"></script>
+</body>
+</html>
