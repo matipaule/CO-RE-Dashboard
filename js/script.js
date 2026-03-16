@@ -111,13 +111,26 @@ function calcularCuotas() {
 }
 
 function copiarPlan(c, v, btn) {
-    const txt = `Propuesta de pago: saldo en ${c} cuotas fijas de $${v.toLocaleString("es-AR")}.`;
+    
+    const txt = `Hola, logré gestionarle un beneficio de cuotas sin interés sobre su deuda total (saldo vencido + cuotas a vencer).
+
+La propuesta de pago es la siguiente: saldo en ${c} cuotas fijas de $${v.toLocaleString("es-AR")}.
+
+El beneficio vence en 48 hs, ¿le interesa aprovecharlo? Si necesita ayuda, ¡avíseme! 
+Confirme hoy antes de que se cierre este chat y pierda la oportunidad.
+
+El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
+CBU: 3840100200000004686158 - Alias: UALEOMICUOTA
+
+Este beneficio no aplica a deudas de tarjeta de crédito. 
+Quedo a disposición.`;
+
     navigator.clipboard.writeText(txt).then(() => {
         const original = btn.innerText;
         btn.innerText = "¡Copiado!";
         setTimeout(() => btn.innerText = original, 1200);
     });
-}
+} 
 
 /** 4. CAMPAÑA DE QUITAS **/
 function generarEscalaQuitas() {
@@ -131,7 +144,7 @@ function generarEscalaQuitas() {
     const diasMora = parseInt(moraInput);
 
     let limiteUala = 0;
-    if (diasMora >= 180) limiteUala = 50;
+    if (diasMora >= 180) limiteUala = 70;
     else if (diasMora >= 150) limiteUala = 40;
     else if (diasMora >= 120) limiteUala = 30;
     else if (diasMora >= 90) limiteUala = 20;
@@ -139,7 +152,7 @@ function generarEscalaQuitas() {
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
     
-    const escalones = [10, 20, 30, 40, 50];
+    const escalones = [10, 20, 30, 40, 50 , 60, 70];
     let opcionesMostradas = 0;
 
     escalones.forEach(porc => {
@@ -168,7 +181,18 @@ function generarEscalaQuitas() {
 
 function copiarChatQuita(monto, porc, btn) {
     const datosPago = "\n\nCBU: 3840100200000004686158\nALIAS: UALEOMICUOTA\nRAZÓN SOCIAL: ALAU TECNOLOGÍA S.A.U";
-    const mensaje = `Hola, logré gestionarle un beneficio del ${porc}% de quita sobre el capital. El monto final para cancelar hoy es de $${monto.toLocaleString("es-AR")}. ¿Le interesa aprovecharlo? ${datosPago}`;
+    const mensaje = `Hola. Logré gestionarle un beneficio del ${porc}% de quita sobre el capital, para que pueda regularizar su situación.
+El monto final para cancelar es de $${monto.toLocaleString("es-AR")}
+El beneficio vence en 48 hs, ¿le interesa aprovecharlo? ¿Si necesita ayuda?
+Confirme Hoy antes que se cierre este chat y pierda la oportunidad.
+
+El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
+${datosPago}
+Importante: debe avisar antes de pagar y enviar el comprobante por esta vía. A las 72 hs hábiles verá el pago reflejado en la app.
+Durante ese período no debe utilizar la cuenta.
+Este beneficio no aplica a deudas de tarjeta de crédito.
+Quedo a disposición`;
+    
     
     navigator.clipboard.writeText(mensaje).then(() => {
         const original = btn.innerText;
