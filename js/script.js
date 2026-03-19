@@ -36,10 +36,12 @@ window.onload = () => {
 document.getElementById("saldoInput").addEventListener("input", function(e) {
     const v = e.target.value;
     const alerta = document.getElementById("alertaFormato");
-    if (v.includes('.') && !v.includes(',') && v.split('.').pop().length <= 2) {
-        alerta.innerText = "⚠ ¿Usaste punto para decimales? Recordá usar la coma (,)";
-    } else {
-        alerta.innerText = "";
+    if (alerta) {
+        if (v.includes('.') && !v.includes(',') && v.split('.').pop().length <= 2) {
+            alerta.innerText = "⚠ ¿Usaste punto para decimales? Recordá usar la coma (,)";
+        } else {
+            alerta.innerText = "";
+        }
     }
 });
 
@@ -53,7 +55,7 @@ document.querySelectorAll('input').forEach(input => {
     });
 });
 
-/** 3. CALCULADORA DE CUOTAS (VERSIÓN ULTRA-LIMPIA) **/
+/** 3. CALCULADORA DE CUOTAS **/
 function obtenerMaxCuotas(saldo) {
     if (saldo <= 1000000) return 12;
     if (saldo <= 6000000) return 15;
@@ -90,13 +92,11 @@ function calcularCuotas() {
     for (let i = 2; i <= max; i++) {
         const valor = Math.ceil(redondeado / i);
         
-        // REGLA: No mostrar cuotas menores a $50.000
         if (valor < 50000) continue; 
 
         hayPlanes = true;
         const fila = document.createElement("tr");
 
-        // Eliminamos la columna de "Estado" / "Disponible"
         fila.innerHTML = `
             <td>Plan ${i} cuotas</td>
             <td class="monto-cuota"><strong>$${valor.toLocaleString("es-AR")}</strong></td>
@@ -111,7 +111,6 @@ function calcularCuotas() {
 }
 
 function copiarPlan(c, v, btn) {
-    
     const txt = `Hola, logré gestionarle un beneficio de cuotas sin interés sobre su deuda total (saldo vencido + cuotas a vencer).
 
 La propuesta de pago es la siguiente: saldo en ${c} cuotas fijas de $${v.toLocaleString("es-AR")}.
@@ -141,7 +140,7 @@ function generarEscalaQuitas() {
     if (!capInput || !totalInput || !moraInput) return alert("Faltan datos (Capital, Total o Mora)");
 
     const capital = parseFloat(capInput.replace(/\./g, "").replace(",", "."));
-    const totalConInteres = parseFloat(totalInput.replace(/\./g, "").replace(",", ".")); // Agregamos esta variable
+    const totalConInteres = parseFloat(totalInput.replace(/\./g, "").replace(",", "."));
     const diasMora = parseInt(moraInput);
 
     let limiteUala = 0;
@@ -153,29 +152,28 @@ function generarEscalaQuitas() {
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
     
-    // Agregamos el "0" al principio de los escalones para que siempre aparezca el Capital solo
     const escalones = [0, 10, 20, 30, 40, 50, 60, 70];
     let opcionesMostradas = 0;
 
     escalones.forEach(porc => {
-        // La lógica: mostramos si está bajo el límite, o si es el escalón 0 (Capital), o el caso especial de 10%
         if (porc === 0 || porc <= limiteUala || (porc === 10 && limiteUala === 0)) {
             opcionesMostradas++;
-            const montoFinal = Math.ceil(capital * (1 - porc/100));
 
-            // --- CÁLCULO DE QUITA REAL ---
-            // Ejemplo: Debe 1M (Total), paga 600k (MontoFinal). Ahorro = 400k. 400k/1M = 40% OFF Real.
+            // montoFinal = capital menos el % de quita sobre capital
+            const montoFinal = Math.ceil(capital * (1 - porc / 100));
+
+            // % de ahorro REAL = comparando monto final contra el total con intereses
             const ahorroPesos = totalConInteres - montoFinal;
             const porcRealTotal = Math.floor((ahorroPesos / totalConInteres) * 100);
-            
-            const fila = document.createElement("tr");
-            
-            // Si el porc es 0, le ponemos un nombre distinto en la tabla
-            const nombrePolitica = porc === 0 ? "Quita de Intereses" : "Quita Especial";
 
+            // Label de la columna: muestra la quita sobre capital (lo técnico)
+            const nombrePolitica = porc === 0 ? "Quita de Intereses" : "Quita Especial";
+            const labelQuita = porc === 0 ? "100% Intereses" : `100% Int. + ${porc}% Cap.`;
+
+            const fila = document.createElement("tr");
             fila.innerHTML = `
                 <td>${nombrePolitica}</td>
-                <td><span style="color: #10b981; font-weight: bold;">${porcRealTotal}% OFF Total</span></td>
+                <td><span style="color: #10b981; font-weight: bold;">${labelQuita}</span></td>
                 <td><strong>$${montoFinal.toLocaleString("es-AR")}</strong></td>
                 <td><button class="copiar-btn" onclick="copiarChatQuita(${montoFinal}, ${porcRealTotal}, this)">Copiar</button></td>
             `;
@@ -184,15 +182,14 @@ function generarEscalaQuitas() {
     });
 
     if (opcionesMostradas === 0) {
-        // Este caso casi no va a ocurrir ahora porque siempre mostramos el "0" (Capital)
         tablaBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px;">Solo quita de intereses. Pago único sugerido: $${capital.toLocaleString("es-AR")}</td></tr>`;
     }
 
     document.getElementById("infoEscala").innerHTML = `<p>Escala autorizada para ${diasMora} días de mora.</p>`;
     document.getElementById("contenedorSalto").style.display = "block";
 }
+
 function copiarChatQuita(monto, porcReal, btn) {
-    // Leemos los datos directo de los inputs al momento de copiar
     const nombre = document.getElementById("nombreInput").value || "Titular";
     const dni = document.getElementById("dniInput").value || "-";
     const datosPago = "\n\nCBU: 3840100200000004686158\nALIAS: UALEOMICUOTA\nRAZÓN SOCIAL: ALAU TECNOLOGÍA S.A.U";
@@ -218,6 +215,7 @@ Quedo a disposición.`;
         setTimeout(() => btn.innerText = original, 1000);
     });
 }
+
 function saltarACuotas() {
     const totalCargado = document.getElementById("totalConInteresInput").value;
     if (!totalCargado) {
