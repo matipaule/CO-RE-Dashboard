@@ -200,3 +200,38 @@ tr.recomendado td { border-left: 4px solid var(--accent-green) !important; backg
 .faq p { color: var(--text-dim); font-size: 0.95rem; margin: 0; }
 
 .alerta-input { color: var(--accent-gold); font-size: 0.85rem; margin-top: -8px; margin-bottom: 10px; min-height: 1.2rem; }
+
+
+.input-wrapper input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: white;
+    padding: 10px;
+    outline: none;
+}
+
+@media (max-width: 600px) {
+    div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important; /* En celular se pone uno abajo del otro */
+    }
+}
+/* Asegura que todos los inputs dentro de un wrapper tengan el espacio para el icono/simbolo */
+.input-wrapper input {
+    padding-left: 45px !important; /* Espacio extra para que el texto no toque el icono */
+    background: #0f172a; /* Color de fondo igual al resto */
+    border: 1px solid var(--border);
+}
+
+.input-wrapper .currency-symbol {
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+}
+
+/* Evita que el input de tipo number se vea distinto */
+input[type="number"] {
+    padding-left: 45px;
+}

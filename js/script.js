@@ -141,6 +141,7 @@ function generarEscalaQuitas() {
     if (!capInput || !totalInput || !moraInput) return alert("Faltan datos (Capital, Total o Mora)");
 
     const capital = parseFloat(capInput.replace(/\./g, "").replace(",", "."));
+    const totalConInteres = parseFloat(totalInput.replace(/\./g, "").replace(",", ".")); // Agregamos esta variable
     const diasMora = parseInt(moraInput);
 
     let limiteUala = 0;
@@ -152,47 +153,64 @@ function generarEscalaQuitas() {
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
     
-    const escalones = [10, 20, 30, 40, 50 , 60, 70];
+    // Agregamos el "0" al principio de los escalones para que siempre aparezca el Capital solo
+    const escalones = [0, 10, 20, 30, 40, 50, 60, 70];
     let opcionesMostradas = 0;
 
     escalones.forEach(porc => {
-        if (porc <= limiteUala || (porc === 10 && limiteUala === 0)) {
+        // La lógica: mostramos si está bajo el límite, o si es el escalón 0 (Capital), o el caso especial de 10%
+        if (porc === 0 || porc <= limiteUala || (porc === 10 && limiteUala === 0)) {
             opcionesMostradas++;
             const montoFinal = Math.ceil(capital * (1 - porc/100));
+
+            // --- CÁLCULO DE QUITA REAL ---
+            // Ejemplo: Debe 1M (Total), paga 600k (MontoFinal). Ahorro = 400k. 400k/1M = 40% OFF Real.
+            const ahorroPesos = totalConInteres - montoFinal;
+            const porcRealTotal = Math.floor((ahorroPesos / totalConInteres) * 100);
+            
             const fila = document.createElement("tr");
             
+            // Si el porc es 0, le ponemos un nombre distinto en la tabla
+            const nombrePolitica = porc === 0 ? "Quita de Intereses" : "Quita Especial";
+
             fila.innerHTML = `
-                <td>Política de Quita</td>
-                <td>${porc}%</td>
+                <td>${nombrePolitica}</td>
+                <td><span style="color: #10b981; font-weight: bold;">${porcRealTotal}% OFF Total</span></td>
                 <td><strong>$${montoFinal.toLocaleString("es-AR")}</strong></td>
-                <td><button class="copiar-btn" onclick="copiarChatQuita(${montoFinal}, ${porc}, this)">Copiar</button></td>
+                <td><button class="copiar-btn" onclick="copiarChatQuita(${montoFinal}, ${porcRealTotal}, this)">Copiar</button></td>
             `;
             tablaBody.appendChild(fila);
         }
     });
 
     if (opcionesMostradas === 0) {
+        // Este caso casi no va a ocurrir ahora porque siempre mostramos el "0" (Capital)
         tablaBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:20px;">Solo quita de intereses. Pago único sugerido: $${capital.toLocaleString("es-AR")}</td></tr>`;
     }
 
     document.getElementById("infoEscala").innerHTML = `<p>Escala autorizada para ${diasMora} días de mora.</p>`;
     document.getElementById("contenedorSalto").style.display = "block";
 }
-
-function copiarChatQuita(monto, porc, btn) {
+function copiarChatQuita(monto, porcReal, btn) {
+    // Leemos los datos directo de los inputs al momento de copiar
+    const nombre = document.getElementById("nombreInput").value || "Titular";
+    const dni = document.getElementById("dniInput").value || "-";
     const datosPago = "\n\nCBU: 3840100200000004686158\nALIAS: UALEOMICUOTA\nRAZÓN SOCIAL: ALAU TECNOLOGÍA S.A.U";
-    const mensaje = `Hola. Logré gestionarle un beneficio del ${porc}% de quita sobre el capital, para que pueda regularizar su situación.
+    
+    const mensaje = `Hola ${nombre}, DNI: ${dni}. Logré gestionarle un beneficio del ${porcReal}% de quita sobre el saldo pendiente total, para que pueda regularizar su situación.
+
 El monto final para cancelar es de $${monto.toLocaleString("es-AR")}
-El beneficio vence en 48 hs, ¿le interesa aprovecharlo? ¿Si necesita ayuda?
-Confirme Hoy antes que se cierre este chat y pierda la oportunidad.
+
+El beneficio vence en 48 hs, ¿le interesa aprovecharlo? Si necesita ayuda, ¡avíseme!
+Confirme hoy antes de que se cierre este chat y pierda la oportunidad.
 
 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
 ${datosPago}
+
 Importante: debe avisar antes de pagar y enviar el comprobante por esta vía. A las 72 hs hábiles verá el pago reflejado en la app.
 Durante ese período no debe utilizar la cuenta.
 Este beneficio no aplica a deudas de tarjeta de crédito.
-Quedo a disposición`;
-    
+Quedo a disposición.`;
     
     navigator.clipboard.writeText(mensaje).then(() => {
         const original = btn.innerText;
@@ -200,7 +218,6 @@ Quedo a disposición`;
         setTimeout(() => btn.innerText = original, 1000);
     });
 }
-
 function saltarACuotas() {
     const totalCargado = document.getElementById("totalConInteresInput").value;
     if (!totalCargado) {

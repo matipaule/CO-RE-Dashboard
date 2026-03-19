@@ -75,9 +75,6 @@
                     <span class="currency-symbol">$</span>
                     <input type="text" id="saldoInput" placeholder="150.000,00">
                 </div>
-
-                
-
                 <button onclick="calcularCuotas()" class="btn-main">Generar Planes</button>
             </div>
             <div id="resultadoHeader" class="resultado-header">
@@ -99,30 +96,50 @@
 
         <section id="quitas" class="pagina-oculta card">
             <h2>Campaña de Quitas Autorizadas</h2>
-            <div class="input-container">
-                <label for="totalConInteresInput">Saldo Total Actual (Con intereses)</label>
-                <div class="input-wrapper">
-                    <span class="currency-symbol">$</span>
-                    <input type="text" id="totalConInteresInput" placeholder="0.000,00">
+            <div class="input-container" style="max-width: 100%; margin: 0 auto;">
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <label for="nombreInput">Nombre del Deudor</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">👤</span>
+                            <input type="text" id="nombreInput" placeholder="Ej: Juan Pérez" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <label for="dniInput">DNI</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">🆔</span>
+                            <input type="text" id="dniInput" placeholder="Ej: 35.123.456" style="padding-left: 45px;">
+                        </div>
+                    </div>
                 </div>
 
-
-
-
-                <label for="capitalInput">Saldo Capital (CRM)</label>
-                <div class="input-wrapper">
-                    <span class="currency-symbol">$</span>
-                    <input type="text" id="capitalInput" placeholder="0.000,00">
+                <div style="margin-bottom: 15px;">
+                    <label for="totalConInteresInput">Saldo Total Actual (Con intereses)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="totalConInteresInput" placeholder="0.000,00" style="padding-left: 45px;">
+                    </div>
                 </div>
 
-                
-                
-                <label for="moraInput">Días de Mora</label>
-                <div class="input-wrapper">
-                    <input type="number" id="moraInput" placeholder="Ej: 130">
+                <div style="margin-bottom: 15px;">
+                    <label for="capitalInput">Saldo Capital (CRM)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="capitalInput" placeholder="0.000,00" style="padding-left: 45px;">
+                    </div>
                 </div>
-                
-                <button onclick="generarEscalaQuitas()" class="btn-main">Calcular Quitas</button>
+
+                <div style="margin-bottom: 20px;">
+                    <label for="moraInput">Días de Mora (Del saldo Mambu)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">📅</span>
+                        <input type="number" id="moraInput" placeholder="Ej: 130" style="padding-left: 45px;">
+                    </div>
+                </div>
+
+                <button onclick="generarEscalaQuitas()" class="btn-main" style="width: 100%;">CALCULAR QUITAS</button>
             </div>
 
             <div id="infoEscala" class="resultado-header"></div>
@@ -192,25 +209,77 @@
         </section>
 
         <section id="faq" class="pagina-oculta card">
-            <h2>Preguntas Frecuentes</h2>
-            <div class="faq-container">
-                <div class="faq">
-                    <h4>¿Por qué no veo planes largos?</h4>
-                    <p>Se ocultan si la cuota baja de $50.000.</p>
-                </div>
-                <div class="faq">
-                    <h4>¿El Veraz se limpia inmediato?</h4>
-                    <p>No, tarda entre 30 y 60 días tras la cancelación total.</p>
-                </div>
-                <div class="faq">
-                    <h4>¿Qué pasa si me atraso en una cuota?</h4>
-                    <p>El plan cae y se reclama el total original con intereses.</p>
-                </div>
-                <div class="faq">
-                    <h4>¿Que opciones hay para TDC?</h4>
-                    <p>Por ahora Ualà no tiene habilitados planes en cuotas ni descuentos debe tratar de cubrir el minimo antes del 30 de mes y sino pagar parcialmente</p>
+            <div class="welcome-header" style="text-align: left; margin-bottom: 25px;">
+                <h2>Preguntas Frecuentes y Soporte</h2>
+                <p>Guía de respuestas rápidas para el deudor y consultas operativas.</p>
+            </div>
+
+            <div class="faq-grid">
+                <div class="ayuda-item" style="border-left: 4px solid #f59e0b;">
+                    <div class="faq-tag" style="color: #f59e0b; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">SISTEMAS</div>
+                    <h4>🔍 ¿El Veraz/BCRA se limpia inmediato?</h4>
+                    <p><strong>No.</strong> La regularización real ocurre al <strong>mes siguiente</strong> de pagar. La web del BCRA muestra datos históricos con <strong>60 días</strong> de retraso.</p>
                 </div>
 
+                <div class="ayuda-item" style="border-left: 4px solid #ef4444;">
+                    <div class="faq-tag" style="color: #ef4444; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">URGENTE</div>
+                    <h4>⚠️ ¿Qué pasa si me atraso en una cuota?</h4>
+                    <p>El plan <strong>cae automáticamente</strong> y se reclama el total original con intereses. Para retomar, se requiere un pago parcial y reprogramación según política vigente.</p>
+                </div>
+
+                <div class="ayuda-item" style="border-left: 4px solid #3b82f6;">
+                    <div class="faq-tag" style="color: #3b82f6; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">TARJETAS</div>
+                    <h4>💳 Tarjeta de Crédito (Ualá Bis / Master)</h4>
+                    <ul class="lista-politicas" style="font-size: 0.85rem; margin-top: 10px;">
+                        <li><strong>Refinanciación:</strong> No habilitada (ni cuotas ni quitas).</li>
+                        <li><strong>Rehabilitación:</strong> Solo si paga antes de los 30 días de atraso.</li>
+                        <li><strong>Intereses:</strong> No se congelan, corren sobre saldo pendiente.</li>
+                        <li><strong>Gestión:</strong> Cubrir mínimo antes del <strong>día 30</strong> de cada mes.</li>
+                    </ul>
+                </div>
+
+                <div class="ayuda-item" style="border-left: 4px solid #10b981;">
+                    <div class="faq-tag" style="color: #10b981; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">PAGOS</div>
+                    <h4>🏦 CBU vs CVU: ¿Dónde debe pagar?</h4>
+                    <p style="margin-bottom: 8px;"><strong>CBU (Oficial):</strong> Obligatorio para <strong>Cuotas o Quitas</strong>. Si paga por CVU, el beneficio se pierde.</p>
+                    <p><strong>CVU (Personal):</strong> Solo para ponerse al día o pagos parciales <strong>sin acuerdo previo</strong>.</p>
+                </div>
+
+                <div class="ayuda-item" style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.1);">
+                    <div class="faq-tag" style="color: var(--primary); font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">SEGURIDAD</div>
+                    <h4>🛡️ ¿Cómo sé que no es una estafa?</h4>
+                    <p style="font-size: 0.85rem;">El CBU está a nombre de <strong>ALAU TECNOLOGÍA S.A.U</strong>. Verificar en <a href="https://www.uala.com.ar/gestion-cobranzas" target="_blank" style="color: var(--primary);">uala.com.ar/cobranzas</a>. Nunca pedimos claves ni acceso remoto.</p>
+                </div>
+
+                <div class="ayuda-item" style="border-left: 4px solid #8b5cf6;">
+                    <div class="faq-tag" style="color: #8b5cf6; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">CALCULADORA</div>
+                    <h4>📏 ¿Por qué no veo planes largos?</h4>
+                    <p>El sistema oculta automáticamente las opciones donde la cuota es menor a <strong>$50.000</strong> (Mínimo por política).</p>
+                </div>
+
+                <div class="ayuda-item" style="border-left: 4px solid #10b981;">
+                    <div class="faq-tag" style="color: #10b981; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">FORMULARIOS</div>
+                    <h4>📋 ¿Dónde encuentro los formularios?</h4>
+                    <p>Accedé a todos los formularios oficiales desde el portal de onboarding de Ualá:</p>
+                    <a href="https://sites.google.com/uala.com.ar/onboarding-de-agencias-uala/forms" 
+                       target="_blank" 
+                       style="color: var(--primary); font-weight: 600; word-break: break-all;">
+                        📎 Portal de Formularios Ualá
+                    </a>
+                </div>
+            </div>
+
+            <div class="faq-footer" style="margin-top: 30px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.8rem;">
+                    <div>
+                        <strong style="color: var(--primary);">CBU:</strong> Clave Bancaria (Ualá Recaudadora). <br>
+                        Uso: Acuerdos formales.
+                    </div>
+                    <div>
+                        <strong style="color: var(--primary);">CVU:</strong> Clave Virtual (Billetera personal). <br>
+                        Uso: Pagos espontáneos.
+                    </div>
+                </div>
             </div>
         </section>
 
