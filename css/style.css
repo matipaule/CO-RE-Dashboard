@@ -235,3 +235,28 @@ tr.recomendado td { border-left: 4px solid var(--accent-green) !important; backg
 input[type="number"] {
     padding-left: 45px;
 }
+
+/* Agregá esto al final de tu style.css */
+.btn-pdf {
+    background: rgba(239, 68, 68, 0.1); /* Rojo sutil */
+    border: 1px solid var(--accent-red);
+    color: var(--accent-red);
+    padding: 8px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: 0.2s;
+    margin-left: 5px;
+}
+
+.btn-pdf:hover {
+    background: var(--accent-red);
+    color: white;
+}
+
+/* Mejora visual para las tablas en general */
+table th {
+    background: rgba(56, 189, 248, 0.05);
+    padding: 12px;
+    border-radius: 4px;
+}
