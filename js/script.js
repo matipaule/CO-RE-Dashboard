@@ -287,77 +287,6 @@ function bloqueFiremas(doc, y) {
     doc.setFontSize(8);
     doc.text("Firma y Sello CO-RE", inicioDerecha, lineaY + 5);
 }
-/*function generarPDFCuotas(cuotas, valorCuota) {
-    const nombre = document.getElementById("nombreCuotaInput")?.value || "";
-    const dni = document.getElementById("dniCuotaInput")?.value || "";
-    if (!nombre || !dni) {
-        alert("Para generar el PDF completá el Nombre y DNI del titular.");
-        return;
-    }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const W = 210, M = 20;
-
-    const hoy = encabezadoPDF(doc, "Acuerdo en Cuotas");
-    const nroAcuerdo = "ACU-" + hoy.getFullYear() + "-" + String(Math.floor(Math.random()*90000)+10000);
-
-    // Nro acuerdo
-    doc.setFontSize(8);
-    doc.setTextColor(255, 180, 180);
-    doc.text("N° " + nroAcuerdo, W - M, 30, { align: "right" });
-
-    let y = 44;
-    y = bloqueCliente(doc, nombre, dni, y);
-
-    // Condiciones
-    const saldoInput = document.getElementById("saldoInput").value;
-    const limpio = saldoInput.replace(/\./g, "").replace(",", ".");
-    const saldoTotal = parseFloat(limpio) || 0;
-    const totalAcuerdo = valorCuota * cuotas;
-    const fechaVenc = obtenerFechaVenc("fechaVencInput");
-
-    doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 56, 3, 3, "F");
-    doc.setTextColor(220, 38, 38);
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
-    const items = [
-        ["Tipo:", "Plan de pagos sin interés en cuotas fijas"],
-        ["Saldo refinanciado:", "$" + saldoTotal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
-        ["Cantidad de cuotas:", cuotas + " cuotas mensuales"],
-        ["Valor de cada cuota:", "$" + valorCuota.toLocaleString("es-AR") + " (fija, sin interés)"],
-        ["Total del acuerdo:", "$" + totalAcuerdo.toLocaleString("es-AR")],
-        ["Vencimiento de la oferta:", fechaVenc],
-    ];
-    doc.setFont("helvetica", "normal");
-    items.forEach(([label, val], i) => {
-        const ry = y + 17 + i * 6.5;
-        doc.setTextColor(148, 163, 184);
-        doc.setFontSize(9);
-        doc.text(label, M + 6, ry);
-        doc.setTextColor(label === "Vencimiento de la oferta:" ? [245, 158, 11] : [248, 250, 252]);
-        doc.setFont("helvetica", "bold");
-        doc.text(val, M + 62, ry);
-        doc.setFont("helvetica", "normal");
-    });
-    y += 63;
-
-    y = bloquePago(doc, y);
-
-    const clausulas = [
-        "1. El incumplimiento de cualquier cuota producirá la caducidad automática del plan, reclamándose el saldo total original con los intereses correspondientes.",
-        "2. El pago debe realizarse exclusivamente al CBU indicado. Los pagos a otros CBU/CVU no serán reconocidos como parte del acuerdo.",
-        "3. La regularización en el BCRA/VERAZ se efectúa al mes siguiente de abonada la última cuota del plan o el pago cancelatorio, según corresponda.",
-        "4. Este beneficio no aplica a deudas de tarjeta de crédito. Durante el proceso de acreditación no debe utilizarse la cuenta.",
-        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión."
-    ];
-    y = bloqueTerminos(doc, clausulas, y);
-    bloqueFiremas(doc, y);
-    piePDF(doc, nroAcuerdo);
-
-    doc.save("Acuerdo_Cuotas_" + nombre.replace(/\s+/g, "_") + "_" + nroAcuerdo + ".pdf");
-}*/
 
 function generarPDFQuita(montoFinal, porcReal) {
     const nombre = document.getElementById("nombreInput")?.value || "";
@@ -403,7 +332,6 @@ function generarPDFQuita(montoFinal, porcReal) {
         ["Tipo:", "Cancelación total con descuento por pago único"],
         ["Saldo Total Actual:", "$" + totalConInteres.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Monto final a abonar:", "$" + montoFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
-        ["Días de mora:", diasMora + " días"],
         ["Descuento aplicado:", porcReal + "% sobre el saldo total"],
         ["Importe descontado:", "$" + ahorroReal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Vencimiento de la oferta:", fechaVenc],
@@ -445,7 +373,8 @@ function generarPDFQuita(montoFinal, porcReal) {
         "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
         "4. Este beneficio no aplica a deudas de tarjeta de crédito. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.",
-        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 ."
+        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
+        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
     ];
     
     y = bloqueTerminos(doc, clausulas, y);
@@ -645,11 +574,163 @@ function generarPDFCuotas(numCuotas, valorCuota) {
         "2. Los pagos deben realizarse exclusivamente al CBU informado.",
         "3. Es obligatorio enviar el comprobante para imputar el pago.",
         "4. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
-        "5. Este documento es una propuesta de pago sujeta a aprobación final."
+        "5. Este documento es una propuesta de pago sujeta a aprobación final.",
+        "6. Libre deuda: Una vez abonada la ultima cuota, solicite el libre deuda a hola@Ualá.com.ar"
     ];
     y = bloqueTerminos(doc, clausulas, y);
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo); // Usamos el mismo nroAcuerdo de arriba
 
     doc.save(`Plan_Cuotas_${nombre.replace(/\s+/g, "_")}.pdf`);
+}
+// ==========================================
+// 5. GENERACIÓN PDF MANUAL (FORMATO UNIFICADO)
+// ==========================================
+function generarPDFPuroManual() {
+    // 1. Capturar datos
+    const nombre = document.getElementById("nombreManualInput")?.value || "Cliente";
+    const dni = document.getElementById("dniManualInput")?.value || "---";
+    let saldoTotalStr = document.getElementById("saldoManualInput")?.value;
+    let capitalStr = document.getElementById("capitalManualInput")?.value;
+    let pagoStr = document.getElementById("pagoManualInput")?.value;
+    let moraStr = document.getElementById("moraManualInput")?.value;
+    
+    if (!saldoTotalStr || !capitalStr || !pagoStr || !moraStr) {
+        alert("⚠️ Por favor completá el Saldo Total, Capital, Días de Mora y el Monto a Cancelar.");
+        return;
+    }
+
+    // 2. Limpieza EXTREMA de números
+    function limpiarPlata(valor) {
+        let sinLetrasNiSignos = valor.replace(/[^0-9.,-]/g, ""); 
+        return parseFloat(sinLetrasNiSignos.replace(/\./g, "").replace(",", "."));
+    }
+
+    const saldoTotal = limpiarPlata(saldoTotalStr);
+    const capital = limpiarPlata(capitalStr);
+    const montoPagar = limpiarPlata(pagoStr);
+    const mora = parseInt(moraStr.replace(/[^0-9]/g, "")); 
+    
+    if (isNaN(saldoTotal) || isNaN(capital) || isNaN(montoPagar) || isNaN(mora)) {
+        alert("⚠️ Verificá que los montos y la mora sean números válidos (no uses letras).");
+        return;
+    }
+
+    // 3. Lógica de validación de políticas
+    let quitaCapitalMax = 0;
+    if (mora >= 180) quitaCapitalMax = 0.70;
+    else if (mora >= 150) quitaCapitalMax = 0.40;
+    else if (mora >= 120) quitaCapitalMax = 0.30;
+    else if (mora >= 90) quitaCapitalMax = 0.20;
+    else if (mora >= 30) quitaCapitalMax = 0.00;
+
+    let pagoMinimoRequerido = capital * (1 - quitaCapitalMax);
+    if (mora < 30) pagoMinimoRequerido = saldoTotal;
+
+    if (montoPagar < pagoMinimoRequerido) {
+        alert(`❌ ERROR: El monto no cumple las políticas.\n\nPara ${mora} días de mora, el PAGO MÍNIMO permitido es de: $${pagoMinimoRequerido.toLocaleString("es-AR", {minimumFractionDigits: 2, maximumFractionDigits: 2})}\n\n(No podés cobrar menos que eso).`);
+        return;
+    }
+
+    const ahorro = saldoTotal - montoPagar;
+    const porcReal = Math.floor((ahorro / saldoTotal) * 100);
+    
+    // Fecha de vencimiento
+    let fechaVencInput = document.getElementById("fechaVencManualInput");
+    let fechaVencStr = fechaVencInput ? fechaVencInput.value : "";
+    let fechaTexto = "";
+    if (fechaVencStr) {
+        const partes = fechaVencStr.split("-");
+        fechaTexto = `${partes[2]}/${partes[1]}/${partes[0]}`;
+    } else {
+        let hoy = new Date();
+        hoy.setDate(hoy.getDate() + 2);
+        fechaTexto = hoy.toLocaleDateString("es-AR");
+    }
+
+    // 4. CREACIÓN DEL PDF (DISEÑO ESTANDARIZADO)
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = 210, M = 20;
+    
+    // Encabezado global
+    if (typeof encabezadoPDF === "function") {
+        encabezadoPDF(doc, "PROPUESTA DE PAGO ÚNICO");
+    }
+    const nroAcuerdo = "MAN-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
+
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("N° " + nroAcuerdo, 190, 30, { align: "right" });
+    
+    let y = 44;
+
+    // Bloque Datos del Titular
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(M, y, W - M * 2, 28, 3, 3, "F");
+    doc.setTextColor(56, 189, 248);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("DATOS DEL TITULAR", M + 6, y + 8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`Nombre: ${nombre.toUpperCase()}`, M + 6, y + 17);
+    doc.text(`DNI: ${dni}`, M + 6, y + 24);
+
+    y += 36;
+    
+    // Bloque Condiciones
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(M, y, W - M * 2, 56, 3, 3, "F");
+    doc.setTextColor(56, 189, 248);
+    doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
+
+    const items = [
+        ["Tipo:", "Cancelación total con descuento por pago único"],
+        ["Saldo Total Actual:", `$${saldoTotal.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
+        ["Importe descontado:", `$${ahorro.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
+        ["Monto final a abonar:", `$${montoPagar.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
+        ["Descuento aplicado:", `${porcReal}% sobre el saldo total`],
+        ["Vencimiento:", fechaTexto]
+    ];
+
+    items.forEach(([label, val], i) => {
+        const ry = y + 17 + i * 7;
+        
+        // Etiqueta en gris
+        doc.setTextColor(148, 163, 184);
+        doc.setFont("helvetica", "normal");
+        doc.text(label, M + 6, ry);
+
+        // Lógica de colores para los montos importantes
+        let color = [255, 255, 255]; 
+        
+        if (label === "Monto final a abonar:" || label === "Vencimiento de la oferta:") {
+            color = [34, 197, 94]; // VERDE
+        } else if (label === "Bonificación a favor:" || label === "Descuento aplicado:") {
+            color = [245, 158, 11]; // AMARILLO/NARANJA
+        }
+
+        doc.setTextColor(...color);
+        doc.setFont("helvetica", "bold");
+        doc.text(val, M + 60, ry);
+    });
+
+    y += 63; 
+    
+    // Llamada a los bloques comunes (CBU, Términos y Firmas)
+    y = bloquePago(doc, y); 
+
+    const clausulas = [
+        "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
+        "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
+        "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
+        "4. Este beneficio no aplica a deudas de tarjeta de crédito. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.",
+        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
+        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
+    ];
+    y = bloqueTerminos(doc, clausulas, y);
+    bloqueFiremas(doc, y); // Utiliza exactamente tu función bloqueFiremas
+    piePDF(doc, nroAcuerdo);
+
+    doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
 }

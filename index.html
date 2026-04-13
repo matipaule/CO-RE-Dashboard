@@ -24,6 +24,7 @@
             <li><a href="#" data-seccion="inicio" class="active">Inicio</a></li>
             <li><a href="#" data-seccion="cuotas">Cuotas</a></li>
             <li><a href="#" data-seccion="quitas">Quitas</a></li>
+            <li><a href="#" data-seccion="manual">PDF Manual</a></li>
             <li><a href="#" data-seccion="caja">Datos de pago</a></li>
             <li><a href="#" data-seccion="politicas">Politicas</a></li>
             <li><a href="#" data-seccion="faq">FAQ</a></li>
@@ -49,6 +50,11 @@
                     <span class="icon">💸</span>
                     <h3>Campaña Quitas</h3>
                     <p>Descuentos por pago único.</p>
+                </div>
+                <div class="card-acceso" onclick="navegarA('manual')">
+                    <span class="icon">📄</span>
+                    <h3>PDF Manual</h3>
+                    <p>Generar un acuerdo a medida.</p>
                 </div>
                 <div class="card-acceso" onclick="navegarA('caja')">
                     <span class="icon">🏦</span>
@@ -195,6 +201,72 @@
             </div>
         </section>
 
+        <section id="manual" class="pagina-oculta card">
+            <h2>Generación de PDF Manual</h2>
+            <p style="color: var(--text-dim); margin-bottom: 20px;">Ingresá los montos y validá según políticas de mora antes de generar.</p>
+            
+            <div class="input-container" style="max-width: 100%; margin: 0 auto;">
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <label for="nombreManualInput">Nombre del Deudor</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">👤</span>
+                            <input type="text" id="nombreManualInput" placeholder="Ej: Juan Pérez" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 150px;">
+                        <label for="dniManualInput">DNI</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">🆔</span>
+                            <input type="text" id="dniManualInput" placeholder="Ej: 35.123.456" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label for="saldoManualInput">Saldo Total Actual (Con intereses)</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="text" id="saldoManualInput" placeholder="150.000,00" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label for="capitalManualInput">Saldo Capital (CRM)</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="text" id="capitalManualInput" placeholder="100.000,00" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 150px;">
+                        <label for="moraManualInput">Días de Mora (Mambu)</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">📅</span>
+                            <input type="number" id="moraManualInput" placeholder="Ej: 130" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                    <div style="flex: 1; min-width: 250px;">
+                        <label for="pagoManualInput">Monto Exacto a Cancelar</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="text" id="pagoManualInput" placeholder="50.000,00" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <label for="fechaVencManualInput">Fecha de vencimiento (opcional)</label>
+                    <input type="date" id="fechaVencManualInput" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
+                    <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
+                </div>
+                
+                <button onclick="generarPDFPuroManual()" class="btn-main" style="width: 100%; margin-top: 15px;">📄 VALIDAR Y GENERAR ACUERDO</button>
+            </div>
+        </section>
+
         <section id="caja" class="pagina-oculta card">
             <h2>🏦 Información de Pago</h2>
             <div class="ayuda-item" style="border-left: 4px solid var(--primary);">
@@ -327,6 +399,6 @@
     </div>
 </main>
 
-<script src="js/script_fixed.js"></script>
+<script src="js/script.js"></script>
 </body>
 </html>
