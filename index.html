@@ -3,42 +3,563 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> CO-RE Dashboard - Gestión CO-RE </title>
-    <link rel="stylesheet" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <title>CO-RE Dashboard · Gestión de Cobranzas</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --bg:        #080c12;
+            --surface:   #0d1420;
+            --surface2:  #111927;
+            --border:    rgba(255,255,255,0.07);
+            --border-hi: rgba(56,189,248,0.3);
+            --primary:   #38bdf8;
+            --primary-d: #0284c7;
+            --accent:    #f0b429;
+            --danger:    #f87171;
+            --success:   #34d399;
+            --text:      #e2e8f0;
+            --text-dim:  #64748b;
+            --text-mid:  #94a3b8;
+            --glow:      0 0 30px rgba(56,189,248,0.12);
+            --radius:    12px;
+            --radius-lg: 20px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ── BACKGROUND NOISE TEXTURE ── */
+        body::before {
+            content: '';
+            position: fixed; inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+            pointer-events: none; z-index: 0; opacity: 0.4;
+        }
+
+        /* ── AMBIENT GLOW ── */
+        body::after {
+            content: '';
+            position: fixed;
+            top: -200px; left: 50%; transform: translateX(-50%);
+            width: 900px; height: 500px;
+            background: radial-gradient(ellipse, rgba(56,189,248,0.04) 0%, transparent 70%);
+            pointer-events: none; z-index: 0;
+        }
+
+        /* ══════════════════════════════
+           HEADER
+        ══════════════════════════════ */
+        header {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(8,12,18,0.88);
+            backdrop-filter: blur(16px) saturate(1.4);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .header-inner {
+            max-width: 1280px; margin: 0 auto;
+            display: flex; align-items: center;
+            padding: 0 24px; height: 58px;
+            gap: 40px;
+        }
+
+        .logo {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800; font-size: 1.15rem;
+            letter-spacing: -0.02em;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .logo a { text-decoration: none; color: var(--text); }
+        .logo span { color: var(--primary); }
+
+        nav { flex: 1; }
+        nav ul { display: flex; list-style: none; gap: 2px; }
+        nav ul li a {
+            display: flex; align-items: center; gap: 6px;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.82rem; font-weight: 500;
+            color: var(--text-dim);
+            text-decoration: none;
+            transition: color 0.2s, background 0.2s;
+            white-space: nowrap;
+        }
+        nav ul li a:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+        nav ul li a.active { color: var(--primary); background: rgba(56,189,248,0.1); }
+        nav ul li a .nav-icon { font-size: 0.9em; }
+
+        .menu-hamburguesa {
+            display: none;
+            font-size: 1.4rem; cursor: pointer;
+            color: var(--text-dim); margin-left: auto;
+            padding: 6px;
+        }
+
+        /* ══════════════════════════════
+           LAYOUT
+        ══════════════════════════════ */
+        main { position: relative; z-index: 1; }
+
+        .container {
+            max-width: 900px; margin: 0 auto;
+            padding: 32px 20px 60px;
+        }
+
+        .pagina-oculta { display: none; }
+        .pagina-activa { display: block; animation: fadeUp 0.35s ease both; }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ══════════════════════════════
+           CARD
+        ══════════════════════════════ */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+        }
+
+        /* Section heading */
+        .card > h2 {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.35rem; font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 28px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px;
+        }
+        .card > h2::before {
+            content: '';
+            display: inline-block; width: 4px; height: 22px;
+            background: var(--primary); border-radius: 2px; flex-shrink: 0;
+        }
+
+        /* ══════════════════════════════
+           INICIO / WELCOME
+        ══════════════════════════════ */
+        .welcome-header {
+            margin-bottom: 32px;
+        }
+        .welcome-header h1 {
+            font-family: 'Syne', sans-serif;
+            font-size: 2rem; font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            margin-bottom: 8px;
+        }
+        .welcome-header p {
+            color: var(--text-dim);
+            font-size: 0.95rem;
+        }
+
+        .grid-inicio {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+
+        .card-acceso {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 22px 18px;
+            cursor: pointer;
+            transition: border-color 0.25s, transform 0.2s, background 0.25s, box-shadow 0.25s;
+            position: relative; overflow: hidden;
+        }
+        .card-acceso::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: radial-gradient(ellipse at top left, rgba(56,189,248,0.06), transparent 60%);
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .card-acceso:hover {
+            border-color: var(--border-hi);
+            transform: translateY(-2px);
+            box-shadow: var(--glow);
+        }
+        .card-acceso:hover::after { opacity: 1; }
+        .card-acceso:active { transform: translateY(0); }
+
+        .card-acceso .icon {
+            font-size: 1.6rem;
+            display: block; margin-bottom: 12px;
+        }
+        .card-acceso h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.9rem; font-weight: 700;
+            margin-bottom: 5px; letter-spacing: -0.01em;
+        }
+        .card-acceso p {
+            font-size: 0.78rem; color: var(--text-dim);
+            line-height: 1.4;
+        }
+
+        /* ══════════════════════════════
+           INPUTS
+        ══════════════════════════════ */
+        .input-container { margin-bottom: 28px; }
+        .input-container > * { margin-bottom: 14px; }
+        .input-container > *:last-child { margin-bottom: 0; }
+
+        label {
+            display: block;
+            font-size: 0.78rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.06em;
+            color: var(--text-mid);
+            margin-bottom: 7px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+        .input-wrapper .currency-symbol {
+            position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+            color: var(--text-dim);
+            font-size: 0.9rem; pointer-events: none;
+            font-family: 'DM Mono', monospace;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="date"] {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 11px 16px 11px 44px;
+            color: var(--text);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.92rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+        }
+        input[type="date"] { padding-left: 16px; }
+        input[type="text"]::placeholder,
+        input[type="number"]::placeholder { color: var(--text-dim); opacity: 0.6; }
+        input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(56,189,248,0.1);
+        }
+
+        /* ── Date input ── */
+        input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.4); cursor: pointer; }
+
+        /* ── Small hint ── */
+        .input-hint {
+            font-size: 0.75rem; color: var(--text-dim);
+            margin-top: 5px; line-height: 1.4;
+        }
+
+        /* ══════════════════════════════
+           BUTTON
+        ══════════════════════════════ */
+        .btn-main {
+            display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+            background: var(--primary);
+            color: #080c12;
+            border: none; border-radius: var(--radius);
+            padding: 12px 24px;
+            font-family: 'Syne', sans-serif;
+            font-size: 0.88rem; font-weight: 700;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            transition: background 0.2s, box-shadow 0.2s, transform 0.15s;
+            width: 100%;
+        }
+        .btn-main:hover {
+            background: #7dd3fc;
+            box-shadow: 0 0 20px rgba(56,189,248,0.3);
+        }
+        .btn-main:active { transform: scale(0.98); }
+
+        .btn-ghost {
+            background: rgba(56,189,248,0.08);
+            color: var(--primary);
+            border: 1px solid rgba(56,189,248,0.25);
+        }
+        .btn-ghost:hover { background: rgba(56,189,248,0.15); box-shadow: none; }
+
+        /* ══════════════════════════════
+           RESULTADO HEADER
+        ══════════════════════════════ */
+        .resultado-header {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.85rem; color: var(--text-mid);
+            margin: 20px 0 12px;
+            padding: 12px 16px;
+            background: rgba(56,189,248,0.04);
+            border: 1px solid rgba(56,189,248,0.12);
+            border-radius: var(--radius);
+            min-height: 0;
+        }
+        .resultado-header:empty { display: none; }
+
+        /* ══════════════════════════════
+           TABLE
+        ══════════════════════════════ */
+        .table-responsive { overflow-x: auto; }
+
+        table {
+            width: 100%; border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+        thead tr {
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 0.7rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-dim);
+        }
+        tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            transition: background 0.15s;
+        }
+        tbody tr:hover { background: rgba(255,255,255,0.03); }
+        td {
+            padding: 12px 14px;
+            font-family: 'DM Mono', monospace;
+            color: var(--text-mid);
+        }
+        td:first-child { color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 0.82rem; }
+
+        /* Pill buttons in table */
+        .btn-tabla {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 5px 12px; border-radius: 6px;
+            font-size: 0.75rem; font-weight: 600;
+            cursor: pointer; border: none;
+            transition: background 0.2s, color 0.2s;
+        }
+        .btn-copiar {
+            background: rgba(255,255,255,0.06); color: var(--text-mid);
+        }
+        .btn-copiar:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+        .btn-pdf {
+            background: rgba(240,180,41,0.1); color: var(--accent);
+        }
+        .btn-pdf:hover { background: rgba(240,180,41,0.2); }
+
+        /* ══════════════════════════════
+           CHECKBOX TARJETA
+        ══════════════════════════════ */
+        .card-toggle {
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface2);
+            overflow: hidden;
+        }
+        .card-toggle label {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 16px; cursor: pointer;
+            text-transform: none; letter-spacing: 0;
+            font-size: 0.88rem; font-weight: 600;
+            color: var(--primary);
+            margin: 0;
+        }
+        .card-toggle input[type="checkbox"] {
+            width: 18px; height: 18px; accent-color: var(--primary);
+            padding: 0; cursor: pointer;
+        }
+        .card-toggle p {
+            font-size: 0.75rem; color: var(--text-dim);
+            padding: 0 16px 12px 46px; line-height: 1.4;
+            margin: 0;
+        }
+
+        /* ══════════════════════════════
+           POLITICAS
+        ══════════════════════════════ */
+        .ayuda-item {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 14px;
+        }
+        .ayuda-item h3 {
+            font-family: 'Syne', sans-serif;
+            font-size: 0.88rem; font-weight: 700;
+            color: var(--text); margin-bottom: 12px;
+        }
+        .ayuda-item h4 {
+            font-size: 0.9rem; font-weight: 600;
+            margin-bottom: 10px; color: var(--text);
+        }
+        .ayuda-item p {
+            font-size: 0.84rem; color: var(--text-mid);
+            line-height: 1.6; margin-bottom: 6px;
+        }
+        .ayuda-item strong { color: var(--text); }
+        .ayuda-item a { color: var(--primary); text-decoration: none; }
+        .ayuda-item a:hover { text-decoration: underline; }
+
+        .lista-politicas {
+            list-style: none; padding: 0;
+        }
+        .lista-politicas li {
+            font-size: 0.84rem; color: var(--text-mid);
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            line-height: 1.5;
+        }
+        .lista-politicas li:last-child { border-bottom: none; }
+        .lista-politicas li strong { color: var(--text); }
+
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .dot.crit { background: var(--danger); }
+        .dot.rec  { background: var(--success); }
+
+        /* Politicas 2-col */
+        .politicas-grid {
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        /* ══════════════════════════════
+           FAQ
+        ══════════════════════════════ */
+        .faq-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .faq-tag {
+            font-size: 0.65rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.1em;
+            margin-bottom: 6px;
+        }
+
+        .faq-footer {
+            margin-top: 24px;
+            padding: 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: grid; grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            font-size: 0.8rem; color: var(--text-mid);
+        }
+        .faq-footer strong { color: var(--primary); }
+
+        /* ══════════════════════════════
+           CAJA
+        ══════════════════════════════ */
+        .datos-pago {
+            display: grid; gap: 12px;
+        }
+        .dato-row {
+            display: flex; align-items: baseline;
+            gap: 10px;
+            padding: 14px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+        .dato-row-label {
+            font-size: 0.72rem; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text-dim);
+            font-weight: 600; min-width: 100px;
+        }
+        .dato-row-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.9rem; color: var(--text);
+            font-weight: 500; word-break: break-all;
+        }
+
+        /* ══════════════════════════════
+           SALTO A CUOTAS
+        ══════════════════════════════ */
+        #contenedorSalto {
+            margin-top: 24px;
+            text-align: center;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+        #contenedorSalto p { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 10px; }
+
+        /* ══════════════════════════════
+           RESPONSIVE
+        ══════════════════════════════ */
+        @media (max-width: 720px) {
+            .header-inner { padding: 0 16px; }
+            nav { display: none; }
+            nav.open { display: block; }
+            nav ul { flex-direction: column; padding: 12px 0; }
+            nav ul li a { padding: 10px 16px; border-radius: 0; }
+            .menu-hamburguesa { display: block; }
+
+            .grid-inicio { grid-template-columns: 1fr 1fr; }
+            .faq-grid { grid-template-columns: 1fr; }
+            .politicas-grid { grid-template-columns: 1fr; }
+            .faq-footer { grid-template-columns: 1fr; }
+            .card { padding: 20px 16px; }
+            .welcome-header h1 { font-size: 1.5rem; }
+        }
+        @media (max-width: 420px) {
+            .grid-inicio { grid-template-columns: 1fr 1fr; gap: 10px; }
+        }
+
+        /* ══════════════════════════════
+           DIVIDER CON FLEX ROW
+        ══════════════════════════════ */
+        .row-inputs {
+            display: flex; gap: 14px; flex-wrap: wrap;
+        }
+        .row-inputs > * { flex: 1; min-width: 180px; }
+    </style>
 </head>
 <body>
 
 <header>
-    <div class="header-content">
+    <div class="header-inner">
         <div class="logo">
-            <a href="#" onclick="navegarA('inicio'); return false;" style="text-decoration: none; color: inherit; cursor: pointer;">
-                Estudio<span> CO-RE</span>
-            </a>
+            <a href="#" onclick="navegarA('inicio'); return false;">Estudio<span> CO-RE</span></a>
         </div>
         <div class="menu-hamburguesa" id="menuToggle">&#9776;</div>
+        <nav id="menuNav">
+            <ul>
+                <li><a href="#" data-seccion="inicio" class="active"><span class="nav-icon">⌂</span> Inicio</a></li>
+                <li><a href="#" data-seccion="cuotas"><span class="nav-icon">📊</span> Cuotas</a></li>
+                <li><a href="#" data-seccion="quitas"><span class="nav-icon">💸</span> Quitas</a></li>
+                <li><a href="#" data-seccion="manual"><span class="nav-icon">📄</span> PDF Manual</a></li>
+                <li><a href="#" data-seccion="caja"><span class="nav-icon">🏦</span> Datos de pago</a></li>
+                <li><a href="#" data-seccion="politicas"><span class="nav-icon">🧠</span> Políticas</a></li>
+                <li><a href="#" data-seccion="faq"><span class="nav-icon">❓</span> FAQ</a></li>
+            </ul>
+        </nav>
     </div>
-    <nav id="menuNav">
-        <ul>
-            <li><a href="#" data-seccion="inicio" class="active">Inicio</a></li>
-            <li><a href="#" data-seccion="cuotas">Cuotas</a></li>
-            <li><a href="#" data-seccion="quitas">Quitas</a></li>
-            <li><a href="#" data-seccion="manual">PDF Manual</a></li>
-            <li><a href="#" data-seccion="caja">Datos de pago</a></li>
-            <li><a href="#" data-seccion="politicas">Politicas</a></li>
-            <li><a href="#" data-seccion="faq">FAQ</a></li>
-        </ul>
-    </nav>
 </header>
 
 <main>
     <div class="container">
 
+        <!-- ══════════ INICIO ══════════ -->
         <section id="inicio" class="pagina-activa card">
             <div class="welcome-header">
-                <h1>Bienvenido a CO-RE Dashboard</h1>
-                <p>Gestión de Cobranzas Especializada </p>
+                <h1>Bienvenido a<br>CO-RE Dashboard</h1>
+                <p>Gestión de Cobranzas Especializada</p>
             </div>
             <div class="grid-inicio">
                 <div class="card-acceso" onclick="navegarA('cuotas')">
@@ -63,7 +584,7 @@
                 </div>
                 <div class="card-acceso" onclick="navegarA('politicas')">
                     <span class="icon">🧠</span>
-                    <h3>Politicas</h3>
+                    <h3>Políticas</h3>
                     <p>Políticas y tips de cierre.</p>
                 </div>
                 <div class="card-acceso" onclick="navegarA('faq')">
@@ -74,34 +595,37 @@
             </div>
         </section>
 
+        <!-- ══════════ CUOTAS ══════════ -->
         <section id="cuotas" class="pagina-oculta card">
             <h2>Cuantificación de Cuotas</h2>
             <div class="input-container">
-                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 4px;">
-                    <div style="flex: 1; min-width: 200px;">
+                <div class="row-inputs">
+                    <div>
                         <label for="nombreCuotaInput">Nombre del Deudor</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">👤</span>
-                            <input type="text" id="nombreCuotaInput" placeholder="Ej: Juan Pérez" style="padding-left: 45px;">
+                            <input type="text" id="nombreCuotaInput" placeholder="Ej: Juan Pérez">
                         </div>
                     </div>
-                    <div style="flex: 1; min-width: 140px;">
+                    <div>
                         <label for="dniCuotaInput">DNI</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">🆔</span>
-                            <input type="text" id="dniCuotaInput" placeholder="Ej: 35.123.456" style="padding-left: 45px;">
+                            <input type="text" id="dniCuotaInput" placeholder="Ej: 35.123.456">
                         </div>
                     </div>
                 </div>
-                <label for="saldoInput">Saldo CRM (Use coma para centavos)</label>
-                <div class="input-wrapper">
-                    <span class="currency-symbol">$</span>
-                    <input type="text" id="saldoInput" placeholder="150.000,00">
+                <div>
+                    <label for="saldoInput">Saldo CRM (Use coma para centavos)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="saldoInput" placeholder="150.000,00">
+                    </div>
                 </div>
                 <div>
                     <label for="fechaVencInput">Fecha de vencimiento de la oferta (opcional)</label>
-                    <input type="date" id="fechaVencInput" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
-                    <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
+                    <input type="date" id="fechaVencInput">
+                    <p class="input-hint">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
                 </div>
                 <button onclick="calcularCuotas()" class="btn-main">Generar Planes</button>
             </div>
@@ -123,57 +647,62 @@
             </div>
         </section>
 
+        <!-- ══════════ QUITAS ══════════ -->
         <section id="quitas" class="pagina-oculta card">
             <h2>Campaña de Quitas Autorizadas</h2>
-            <div class="input-container" style="max-width: 100%; margin: 0 auto;">
+            <div class="input-container">
+                <div class="card-toggle">
+                    <label>
+                        <input type="checkbox" id="esTarjetaCredito">
+                        🟢 MODO TARJETA DE CRÉDITO (UalaBank TDC)
+                    </label>
+                    <p>Activa el CBU de UalaBank TDC y las cláusulas específicas.</p>
+                </div>
 
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 250px;">
+                <div class="row-inputs">
+                    <div>
                         <label for="nombreInput">Nombre del Deudor</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">👤</span>
-                            <input type="text" id="nombreInput" placeholder="Ej: Juan Pérez" style="padding-left: 45px;">
+                            <input type="text" id="nombreInput" placeholder="Ej: Juan Pérez">
                         </div>
                     </div>
-                    <div style="flex: 1; min-width: 150px;">
+                    <div>
                         <label for="dniInput">DNI</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">🆔</span>
-                            <input type="text" id="dniInput" placeholder="Ej: 35.123.456" style="padding-left: 45px;">
+                            <input type="text" id="dniInput" placeholder="Ej: 35.123.456">
                         </div>
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 15px;">
-                    <label for="totalConInteresInput">Saldo Total Actual (Con intereses)</label>
-                    <div class="input-wrapper">
-                        <span class="currency-symbol">$</span>
-                        <input type="text" id="totalConInteresInput" placeholder="0.000,00" style="padding-left: 45px;">
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 15px;">
-                    <label for="capitalInput">Saldo Capital (CRM)</label>
-                    <div class="input-wrapper">
-                        <span class="currency-symbol">$</span>
-                        <input type="text" id="capitalInput" placeholder="0.000,00" style="padding-left: 45px;">
-                    </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label for="moraInput">Días de Mora (Del saldo Mambu)</label>
-                    <div class="input-wrapper">
-                        <span class="currency-symbol">📅</span>
-                        <input type="number" id="moraInput" placeholder="Ej: 130" style="padding-left: 45px;">
                     </div>
                 </div>
 
                 <div>
-                    <label for="fechaVencInput">Fecha de vencimiento de la oferta (opcional)</label>
-                    <input type="date" id="fechaVencInputQuita" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
-                    <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
+                    <label for="totalConInteresInput">Saldo Total Actual (Con intereses)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="totalConInteresInput" placeholder="0.000,00">
+                    </div>
                 </div>
-                <button onclick="generarEscalaQuitas()" class="btn-main" style="width: 100%;">CALCULAR QUITAS</button>
+                <div>
+                    <label for="capitalInput">Saldo Capital (CRM)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="capitalInput" placeholder="0.000,00">
+                    </div>
+                </div>
+                <div>
+                    <label for="moraInput">Días de Mora (Del saldo Mambu)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">📅</span>
+                        <input type="number" id="moraInput" placeholder="Ej: 130">
+                    </div>
+                </div>
+                <div>
+                    <label for="fechaVencInputQuita">Fecha de vencimiento de la oferta (opcional)</label>
+                    <input type="date" id="fechaVencInputQuita">
+                    <p class="input-hint">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
+                </div>
+                <button onclick="generarEscalaQuitas()" class="btn-main">CALCULAR QUITAS</button>
             </div>
 
             <div id="infoEscala" class="resultado-header"></div>
@@ -193,205 +722,213 @@
                 </table>
             </div>
 
-            <div id="contenedorSalto" style="display:none; margin-top: 25px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
-                <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 10px;">¿No acepta pago único?</p>
-                <button onclick="saltarACuotas()" class="btn-main" style="background: rgba(56, 189, 248, 0.1); color: var(--primary); border: 1px solid var(--primary);">
+            <div id="contenedorSalto" style="display:none;">
+                <p>¿No acepta pago único?</p>
+                <button onclick="saltarACuotas()" class="btn-main btn-ghost">
                     Refinanciar sobre Total →
                 </button>
             </div>
         </section>
 
+        <!-- ══════════ MANUAL ══════════ -->
         <section id="manual" class="pagina-oculta card">
             <h2>Generación de PDF Manual</h2>
-            <p style="color: var(--text-dim); margin-bottom: 20px;">Ingresá los montos y validá según políticas de mora antes de generar.</p>
-            
-            <div class="input-container" style="max-width: 100%; margin: 0 auto;">
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 250px;">
+            <p style="color: var(--text-dim); font-size:0.85rem; margin-bottom: 24px; margin-top:-12px;">Ingresá los montos y validá según políticas de mora antes de generar.</p>
+
+            <div class="input-container">
+                <div class="row-inputs">
+                    <div>
                         <label for="nombreManualInput">Nombre del Deudor</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">👤</span>
-                            <input type="text" id="nombreManualInput" placeholder="Ej: Juan Pérez" style="padding-left: 45px;">
+                            <input type="text" id="nombreManualInput" placeholder="Ej: Juan Pérez">
                         </div>
                     </div>
-                    <div style="flex: 1; min-width: 150px;">
+                    <div>
                         <label for="dniManualInput">DNI</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">🆔</span>
-                            <input type="text" id="dniManualInput" placeholder="Ej: 35.123.456" style="padding-left: 45px;">
+                            <input type="text" id="dniManualInput" placeholder="Ej: 35.123.456">
                         </div>
                     </div>
                 </div>
-
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 200px;">
+                <div class="row-inputs">
+                    <div>
                         <label for="saldoManualInput">Saldo Total Actual (Con intereses)</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">$</span>
-                            <input type="text" id="saldoManualInput" placeholder="150.000,00" style="padding-left: 45px;">
+                            <input type="text" id="saldoManualInput" placeholder="150.000,00">
                         </div>
                     </div>
-                    <div style="flex: 1; min-width: 200px;">
+                    <div>
                         <label for="capitalManualInput">Saldo Capital (CRM)</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">$</span>
-                            <input type="text" id="capitalManualInput" placeholder="100.000,00" style="padding-left: 45px;">
+                            <input type="text" id="capitalManualInput" placeholder="100.000,00">
                         </div>
                     </div>
                 </div>
-
-                <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 150px;">
+                <div class="row-inputs">
+                    <div>
                         <label for="moraManualInput">Días de Mora (Mambu)</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">📅</span>
-                            <input type="number" id="moraManualInput" placeholder="Ej: 130" style="padding-left: 45px;">
+                            <input type="number" id="moraManualInput" placeholder="Ej: 130">
                         </div>
                     </div>
-                    <div style="flex: 1; min-width: 250px;">
+                    <div>
                         <label for="pagoManualInput">Monto Exacto a Cancelar</label>
                         <div class="input-wrapper">
                             <span class="currency-symbol">$</span>
-                            <input type="text" id="pagoManualInput" placeholder="50.000,00" style="padding-left: 45px;">
+                            <input type="text" id="pagoManualInput" placeholder="50.000,00">
                         </div>
                     </div>
                 </div>
-                
                 <div>
                     <label for="fechaVencManualInput">Fecha de vencimiento (opcional)</label>
-                    <input type="date" id="fechaVencManualInput" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
-                    <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
+                    <input type="date" id="fechaVencManualInput">
+                    <p class="input-hint">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
                 </div>
-                
-                <button onclick="generarPDFPuroManual()" class="btn-main" style="width: 100%; margin-top: 15px;">📄 VALIDAR Y GENERAR ACUERDO</button>
+                <button onclick="generarPDFPuroManual()" class="btn-main" style="margin-top: 6px;">📄 VALIDAR Y GENERAR ACUERDO</button>
             </div>
         </section>
 
+        <!-- ══════════ CAJA ══════════ -->
         <section id="caja" class="pagina-oculta card">
-            <h2>🏦 Información de Pago</h2>
-            <div class="ayuda-item" style="border-left: 4px solid var(--primary);">
-                <div id="datosTransferenciaCompleto">
-                    <p><strong>Razón Social:</strong> ALAU TECNOLOGIA S.A.U.</p>
-                    <p><strong>CUIT:</strong> 30-71542170-0</p>
-                    <p><strong>CBU:</strong> 3840100200000004686158</p>
-                    <p><strong>Alias:</strong> UALEOMICUOTA</p>
+            <h2>Información de Pago</h2>
+            <div class="datos-pago" id="datosTransferenciaCompleto">
+                <div class="dato-row">
+                    <span class="dato-row-label">Razón Social</span>
+                    <span class="dato-row-val">ALAU TECNOLOGIA S.A.U.</span>
                 </div>
-                <button class="btn-main" style="margin-top: 15px; width: 100%;" onclick="copiarTodoPago()">
-                    📋 Copiar Datos Completos
-                </button>
+                <div class="dato-row">
+                    <span class="dato-row-label">CUIT</span>
+                    <span class="dato-row-val">30-71542170-0</span>
+                </div>
+                <div class="dato-row">
+                    <span class="dato-row-label">CBU</span>
+                    <span class="dato-row-val">3840100200000004686158</span>
+                </div>
+                <div class="dato-row">
+                    <span class="dato-row-label">Alias</span>
+                    <span class="dato-row-val">UALEOMICUOTA</span>
+                </div>
             </div>
+            <button class="btn-main" style="margin-top: 18px;" onclick="copiarTodoPago()">
+                📋 Copiar Datos Completos
+            </button>
         </section>
 
+        <!-- ══════════ POLITICAS ══════════ -->
         <section id="politicas" class="pagina-oculta card">
             <h2>Políticas de Gestión</h2>
-            <div class="ayuda-item" style="background: #161e2e; margin-bottom: 20px;">
-                <h3>📊 Límites de Cuotas</h3>
-                <ul class="lista-politicas">
-                    <li><strong>Hasta $1M:</strong> Max 12 cuotas.</li>
-                    <li><strong>$1M a $6M:</strong> Max 15 cuotas.</li>
-                    <li><strong>$6M a $20M:</strong> Max 18 cuotas.</li>
-                    <li><strong>+$20M:</strong> Max 36 cuotas.</li>
-                </ul>
-                <h3>📊 Quitas Máximas</h3>
-                <ul class="lista-politicas">
-                    <li><strong>30-90 días:</strong> 100% Int.</li>
-                    <li><strong>90-120 días:</strong> 100% Int. + 20% Cap.</li>
-                    <li><strong>120-150 días:</strong> 100% Int. + 30% Cap.</li>
-                    <li><strong>150-180 días:</strong> 100% Int. + 40% Cap.</li>
-                    <li><strong>+180 días:</strong> 100% Int. + 70% Cap.</li>
-                </ul>
+            <div class="politicas-grid">
+                <div class="ayuda-item">
+                    <h3>📊 Límites de Cuotas</h3>
+                    <ul class="lista-politicas">
+                        <li><strong>Hasta $1M</strong> — Máx. 12 cuotas</li>
+                        <li><strong>$1M a $6M</strong> — Máx. 15 cuotas</li>
+                        <li><strong>$6M a $20M</strong> — Máx. 18 cuotas</li>
+                        <li><strong>+$20M</strong> — Máx. 36 cuotas</li>
+                    </ul>
+                </div>
+                <div class="ayuda-item">
+                    <h3>📊 Quitas Máximas</h3>
+                    <ul class="lista-politicas">
+                        <li><strong>30–90 días</strong> — 100% Int.</li>
+                        <li><strong>90–120 días</strong> — 100% Int. + 20% Cap.</li>
+                        <li><strong>120–150 días</strong> — 100% Int. + 30% Cap.</li>
+                        <li><strong>150–180 días</strong> — 100% Int. + 40% Cap.</li>
+                        <li><strong>+180 días</strong> — 100% Int. + 70% Cap.</li>
+                    </ul>
+                </div>
             </div>
-            <div class="ayuda-item">
+            <div class="ayuda-item" style="margin-top:14px;">
                 <h3>💡 Tips de Cierre</h3>
                 <p><span class="dot crit"></span> <strong>Cuota Mínima:</strong> $50.000 (Sin excepción).</p>
-                <p><span class="dot rec"></span> <strong>Negociacion escalonada:</strong> Siempre empezar por la quita de intereses.</p>
-                <p><strong>BCRA:</strong> Informar demora de 30-60 días en actualizar.</p>
+                <p><span class="dot rec"></span> <strong>Negociación escalonada:</strong> Siempre empezar por la quita de intereses.</p>
+                <p><strong>BCRA:</strong> Informar demora de 30–60 días en actualizar.</p>
             </div>
         </section>
 
+        <!-- ══════════ FAQ ══════════ -->
         <section id="faq" class="pagina-oculta card">
-            <div class="welcome-header" style="text-align: left; margin-bottom: 25px;">
-                <h2>Preguntas Frecuentes y Soporte</h2>
-                <p>Guía de respuestas rápidas para el deudor y consultas operativas.</p>
+            <div class="welcome-header" style="margin-bottom:24px;">
+                <h2 style="font-family:'Syne',sans-serif; font-size:1.35rem; font-weight:700; letter-spacing:-0.02em; margin-bottom:6px;">Preguntas Frecuentes</h2>
+                <p style="color:var(--text-dim); font-size:0.85rem;">Guía de respuestas rápidas para el deudor y consultas operativas.</p>
             </div>
 
             <div class="faq-grid">
-
-                <div class="ayuda-item" style="border-left: 4px solid #f59e0b;">
-                    <div class="faq-tag" style="color: #f59e0b; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">SISTEMAS</div>
+                <div class="ayuda-item" style="border-left: 3px solid #f59e0b;">
+                    <div class="faq-tag" style="color: #f59e0b;">SISTEMAS</div>
                     <h4>🔍 ¿El Veraz/BCRA se regulariza de inmediato?</h4>
                     <p><strong>No.</strong> La regularización ocurre al <strong>mes siguiente</strong> de pagar. La web del BCRA muestra datos con <strong>60 días</strong> de retraso.</p>
-                    <p style="margin-top: 8px;"><a href="https://www.bcra.gov.ar" target="_blank" style="color: var(--primary);">www.bcra.gov.ar</a></p>
+                    <p style="margin-top:8px;"><a href="https://www.bcra.gov.ar" target="_blank">www.bcra.gov.ar</a></p>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #ef4444;">
-                    <div class="faq-tag" style="color: #ef4444; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">URGENTE</div>
+                <div class="ayuda-item" style="border-left: 3px solid #ef4444;">
+                    <div class="faq-tag" style="color: #ef4444;">URGENTE</div>
                     <h4>⚠️ ¿Qué pasa si me atraso en una cuota?</h4>
                     <p>El plan <strong>cae automáticamente</strong> y se reclama el total original con intereses.</p>
-                    <p style="margin-top: 8px;">Para mantenerlo: pagar antes de fin de mes, o como mínimo un <strong>pago parcial</strong>, o gestionar un nuevo plan antes de que caiga el vigente.</p>
+                    <p style="margin-top:8px;">Para mantenerlo: pagar antes de fin de mes, o un <strong>pago parcial</strong>, o gestionar un nuevo plan antes de que caiga el vigente.</p>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #3b82f6;">
-                    <div class="faq-tag" style="color: #3b82f6; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">TARJETAS</div>
+                <div class="ayuda-item" style="border-left: 3px solid #3b82f6;">
+                    <div class="faq-tag" style="color: #3b82f6;">TARJETAS</div>
                     <h4>💳 Tarjeta de Crédito (Mastercard)</h4>
-                    <ul class="lista-politicas" style="font-size: 0.85rem; margin-top: 10px;">
-                        <li><strong>Refinanciación:</strong> No habilitada por Ualá para ningún caso ni cliente <em>(por ahora)</em>. No hay cuotas ni quitas.</li>
-                        <li><strong>Rehabilitación:</strong> Solo si paga antes de los <strong>30 días</strong> de atraso. Si no, la tarjeta NO se rehabilita.</li>
+                    <ul class="lista-politicas" style="margin-top:8px;">
+                        <li><strong>Refinanciación:</strong> No habilitada por Ualá para ningún caso <em>(por ahora)</em>.</li>
+                        <li><strong>Rehabilitación:</strong> Solo si paga antes de <strong>30 días</strong> de atraso.</li>
                         <li><strong>Intereses:</strong> No se congelan, corren sobre saldo pendiente.</li>
                         <li><strong>Gestión:</strong> Cubrir pago mínimo antes del <strong>día 30</strong> del mes.</li>
                     </ul>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #10b981;">
-                    <div class="faq-tag" style="color: #10b981; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">PAGOS</div>
+                <div class="ayuda-item" style="border-left: 3px solid #10b981;">
+                    <div class="faq-tag" style="color: #10b981;">PAGOS</div>
                     <h4>🏦 CBU vs CVU: ¿Dónde debe pagar?</h4>
-                    <p style="margin-bottom: 8px;"><strong>CBU (Oficial):</strong> Obligatorio para <strong>Cuotas o Quitas</strong>. Si paga por CVU, el beneficio se pierde y <strong>no hay devolución</strong>. La app no lo permite.</p>
-                    <p><strong>CVU (Personal):</strong> Solo para ponerse al día o pagos parciales sin acuerdo previo.</p>
+                    <p><strong>CBU (Oficial):</strong> Obligatorio para <strong>Cuotas o Quitas</strong>. Si paga por CVU, el beneficio se pierde y <strong>no hay devolución</strong>.</p>
+                    <p style="margin-top:8px;"><strong>CVU (Personal):</strong> Solo para ponerse al día o pagos parciales sin acuerdo previo.</p>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #38bdf8;">
-                    <div class="faq-tag" style="color: #38bdf8; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">CUENTA</div>
+                <div class="ayuda-item" style="border-left: 3px solid #38bdf8;">
+                    <div class="faq-tag" style="color: #38bdf8;">CUENTA</div>
                     <h4>📱 ¿Cuándo puedo volver a usar la cuenta Ualá?</h4>
                     <p>Una vez que esté <strong>cancelada toda la deuda</strong>.</p>
-                    <p style="margin-top: 8px; color: #ef4444; font-weight: bold;">⚠ Mientras el pago está EN PROCESO, NO SE DEBE USAR la cuenta.</p>
+                    <p style="margin-top:8px; color: var(--danger); font-weight:600;">⚠ Mientras el pago está EN PROCESO, NO SE DEBE USAR la cuenta.</p>
                 </div>
 
-                <div class="ayuda-item" style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.1);">
-                    <div class="faq-tag" style="color: var(--primary); font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">SEGURIDAD</div>
+                <div class="ayuda-item" style="border-left: 3px solid rgba(255,255,255,0.12);">
+                    <div class="faq-tag" style="color: var(--primary);">SEGURIDAD</div>
                     <h4>🛡️ ¿Cómo demostrar que no es una estafa?</h4>
-                    <p style="font-size: 0.85rem;">El CBU está a nombre de <strong>ALAU TECNOLOGÍA S.A.U</strong>. Puede chatear con Ualá desde la app (Uali) o verificar en <a href="https://www.uala.com.ar/gestion-cobranzas" target="_blank" style="color: var(--primary);">uala.com.ar/cobranzas</a>.</p>
-                    <p style="margin-top: 8px; font-size: 0.85rem;"><strong>Nunca pedimos claves ni acceso remoto.</strong></p>
+                    <p>El CBU está a nombre de <strong>ALAU TECNOLOGÍA S.A.U</strong>. Puede chatear con Ualá desde la app (Uali) o verificar en <a href="https://www.uala.com.ar/gestion-cobranzas" target="_blank">uala.com.ar/cobranzas</a>.</p>
+                    <p style="margin-top:8px;"><strong>Nunca pedimos claves ni acceso remoto.</strong></p>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #8b5cf6;">
-                    <div class="faq-tag" style="color: #8b5cf6; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">CALCULADORA</div>
+                <div class="ayuda-item" style="border-left: 3px solid #8b5cf6;">
+                    <div class="faq-tag" style="color: #8b5cf6;">CALCULADORA</div>
                     <h4>📏 ¿Por qué no veo planes largos?</h4>
                     <p>El sistema oculta automáticamente las opciones donde la cuota es menor a <strong>$50.000</strong> (Mínimo por política).</p>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #10b981;">
-                    <div class="faq-tag" style="color: #10b981; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">FORMULARIOS</div>
+                <div class="ayuda-item" style="border-left: 3px solid #10b981;">
+                    <div class="faq-tag" style="color: #10b981;">FORMULARIOS</div>
                     <h4>📋 ¿Dónde encuentro los formularios?</h4>
                     <p>Accedé a todos los formularios oficiales desde el portal de onboarding de Ualá:</p>
-                    <a href="https://sites.google.com/uala.com.ar/onboarding-de-agencias-uala/forms" 
-                       target="_blank" 
-                       style="color: var(--primary); font-weight: 600; word-break: break-all;">
+                    <a href="https://sites.google.com/uala.com.ar/onboarding-de-agencias-uala/forms" target="_blank" style="color: var(--primary); font-weight:600; font-size:0.85rem; word-break:break-all;">
                         📎 Portal de Formularios Ualá
                     </a>
                 </div>
-
             </div>
 
-            <div class="faq-footer" style="margin-top: 30px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; font-size: 0.8rem;">
-                    <div>
-                        <strong style="color: var(--primary);">CBU:</strong> Clave Bancaria (Ualá Recaudadora). <br>
-                        Uso: Acuerdos formales.
-                    </div>
-                    <div>
-                        <strong style="color: var(--primary);">CVU:</strong> Clave Virtual (Billetera personal). <br>
-                        Uso: Pagos espontáneos.
-                    </div>
+            <div class="faq-footer">
+                <div>
+                    <strong>CBU:</strong> Clave Bancaria (Ualá Recaudadora).<br>
+                    Uso: Acuerdos formales.
+                </div>
+                <div>
+                    <strong>CVU:</strong> Clave Virtual (Billetera personal).<br>
+                    Uso: Pagos espontáneos.
                 </div>
             </div>
         </section>
@@ -400,5 +937,35 @@
 </main>
 
 <script src="js/script.js"></script>
+<script>
+    // ── NAVEGACIÓN ──
+    function navegarA(seccion) {
+        document.querySelectorAll('.pagina-activa, .pagina-oculta').forEach(el => {
+            el.classList.remove('pagina-activa');
+            el.classList.add('pagina-oculta');
+        });
+        const target = document.getElementById(seccion);
+        if (target) {
+            target.classList.remove('pagina-oculta');
+            target.classList.add('pagina-activa');
+        }
+        document.querySelectorAll('nav a').forEach(a => {
+            a.classList.toggle('active', a.dataset.seccion === seccion);
+        });
+        // cerrar menu mobile
+        document.getElementById('menuNav').classList.remove('open');
+    }
+
+    document.querySelectorAll('nav a[data-seccion]').forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            navegarA(a.dataset.seccion);
+        });
+    });
+
+    document.getElementById('menuToggle').addEventListener('click', () => {
+        document.getElementById('menuNav').classList.toggle('open');
+    });
+</script>
 </body>
 </html>

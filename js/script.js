@@ -234,6 +234,29 @@ function bloquePago(doc, y) {
     return y + 41;
 }
 
+
+function bloquePagoTDC(doc, y) {
+    const M = 20, W = 210;
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(M, y, W - M * 2, 35, 3, 3, "F");
+    doc.setTextColor(56, 189, 248);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("DATOS PARA PAGO DE TARJETA (UalaBank TDC)", M + 6, y + 8);
+    
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(8);
+    const lineas = [
+        "Entidad: UalaBank (TDC)",
+        "CBU: 3840200500000049624900",
+        "Alias: ACUERDO.UALABANK.TDC",
+        "Importante: Solo deudas de Tarjeta de Crédito."
+    ];
+    lineas.forEach((l, i) => doc.text(l, M + 6, y + 16 + (i * 5)));
+    return y + 42;
+}
+
 function bloqueTerminos(doc, clausulas, y) {
     const W = 210, M = 20;
     const altura = 14 + clausulas.length * 9;
@@ -260,8 +283,7 @@ function bloqueFiremas(doc, y) {
     doc.setDrawColor(51, 65, 85);
     doc.setLineWidth(0.3);
 
-    // --- FIRMA TITULAR (IZQUIERDA) ---
-    
+       
 
     // --- FIRMA CO-RE (DERECHA) ---
     const inicioDerecha = W - M - 70;
@@ -276,7 +298,7 @@ function bloqueFiremas(doc, y) {
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text('Responsable de Gestión', inicioDerecha, lineaY - 7);
+    doc.text('Apoderada', inicioDerecha, lineaY - 7);
     doc.text('CO-RE | Collection. Recovery', inicioDerecha, lineaY - 3);
 
     // 3. La Línea
@@ -292,6 +314,9 @@ function generarPDFQuita(montoFinal, porcReal) {
     const nombre = document.getElementById("nombreInput")?.value || "";
     const dni = document.getElementById("dniInput")?.value || "";
     
+    // 1. Detectar si el switch de TDC está activado
+    const esTDC = document.getElementById("esTarjetaCredito")?.checked || false;
+
     if (!nombre || !dni) {
         alert("Para generar el PDF completá el Nombre y DNI del titular.");
         return;
@@ -301,10 +326,13 @@ function generarPDFQuita(montoFinal, porcReal) {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = 210, M = 20;
 
-    const hoy = encabezadoPDF(doc, "Acuerdo Cancelatorio");
-    const nroAcuerdo = "QUI-" + hoy.getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
+    // Título dinámico según producto
+    const tituloDoc = esTDC ? "Acuerdo Cancelatorio - Tarjeta de Crédito" : "Acuerdo Cancelatorio - Préstamo";
+    const hoy = encabezadoPDF(doc, tituloDoc);
+    const prefijo = esTDC ? "TDC-" : "QUI-";
+    const nroAcuerdo = prefijo + hoy.getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
 
-    // Número de acuerdo en rojo suave arriba
+    // Número de acuerdo arriba
     doc.setFontSize(8);
     doc.setTextColor(255, 180, 180);
     doc.text("N° " + nroAcuerdo, W - M, 30, { align: "right" });
@@ -312,24 +340,22 @@ function generarPDFQuita(montoFinal, porcReal) {
     let y = 44;
     y = bloqueCliente(doc, nombre, dni, y);
 
-    // Captura de datos de los inputs
+    // Captura de datos
     const totalConInteres = parseFloat((document.getElementById("totalConInteresInput")?.value || "0").replace(/\./g, "").replace(",", ".")) || 0;
-    const diasMora = parseInt(document.getElementById("moraInput")?.value) || 0;
     const ahorroReal = totalConInteres - montoFinal;
     const fechaVenc = obtenerFechaVenc("fechaVencInputQuita");
 
     // Recuadro de condiciones
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 64, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, 51, 3, 3, "F");
     
-    doc.setTextColor(220, 38, 38); // Rojo para el título del bloque
+    doc.setTextColor(220, 38, 38); 
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.text("CONDICIONES DEL ACUERDO CANCELATORIO", M + 6, y + 8);
 
-    // Estructura de ítems corregida
     const items = [
-        ["Tipo:", "Cancelación total con descuento por pago único"],
+        ["Tipo:", esTDC ? "Cancelación TDC (Pago Único)" : "Cancelación total con descuento"],
         ["Saldo Total Actual:", "$" + totalConInteres.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Monto final a abonar:", "$" + montoFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Descuento aplicado:", porcReal + "% sobre el saldo total"],
@@ -340,22 +366,14 @@ function generarPDFQuita(montoFinal, porcReal) {
     doc.setFont("helvetica", "normal");
     items.forEach(([label, val], i) => {
         const ry = y + 17 + i * 6;
-        
-        // Color para las etiquetas (Labels)
-        doc.setTextColor(148, 163, 184); // Gris azulado
+        doc.setTextColor(148, 163, 184); 
         doc.setFontSize(8.5);
         doc.text(label, M + 6, ry);
 
-        // Lógica de colores para los valores
-        let color = [248, 250, 252]; // Blanco por defecto
-        
-        if (label === "Monto final a abonar:") {
-            color = [34, 197, 94]; // VERDE resaltado
-        } else if (label === "importe descontado:") {
-            color = [180, 163, 15]; // BLANCO (para no confundir con el pago)
-        } else if (label === "Vencimiento de la oferta:") {
-            color = [34, 197, 94]; // VERDE
-        }
+        let color = [248, 250, 252]; 
+        if (label === "Monto final a abonar:") color = [34, 197, 94]; 
+        else if (label === "Importe descontado:") color = [180, 163, 15]; 
+        else if (label === "Vencimiento de la oferta:") color = [34, 197, 94]; 
 
         doc.setTextColor(...color);
         doc.setFont("helvetica", "bold");
@@ -363,26 +381,37 @@ function generarPDFQuita(montoFinal, porcReal) {
         doc.setFont("helvetica", "normal");
     });
 
-    y += 71;
+    y += 58; // Espacio después del recuadro de condiciones
 
-    // Bloques adicionales (deben estar definidos en tu script global)
-    y = bloquePago(doc, y);
+    // 2. BLOQUE DE PAGO DINÁMICO
+    if (esTDC) {
+        y = bloquePagoTDC(doc, y); // Llama a la función con el CBU ...49624900
+    } else {
+        y = bloquePago(doc, y); // CBU Alau Préstamos
+    }
 
-    const clausulas = [
-        "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
-        "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
-        "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
-        "4. Este beneficio no aplica a deudas de tarjeta de crédito. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.",
-        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
+    // 3. CLÁUSULAS DINÁMICAS
+    let clausulas = [
+        "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido.",
+        "2. El pago debe realizarse exclusivamente al CBU indicado. Otros medios no serán reconocidos.",
+        "3. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio."
     ];
+
+    if (esTDC) {
+        clausulas.push("4. Este acuerdo aplica exclusivamente a deudas de Tarjeta de Crédito (UalaBank TDC).");
+        clausulas.push("5. La acreditación del pago puede demorar hasta 96 hs hábiles.");
+        clausulas.push("6. Una vez saldado, solicite el libre deuda a hola@uala.com.ar");
+    } else {
+        clausulas.push("4. Este beneficio no aplica a deudas de tarjeta de crédito.");
+        clausulas.push("5. Durante el proceso de acreditación (72 hs) no debe utilizarse la cuenta.");
+        clausulas.push("6. Solicite el libre deuda por mail a hola@uala.com.ar cuando el saldo esté en 0.");
+    }
     
     y = bloqueTerminos(doc, clausulas, y);
-    bloqueFiremas(doc, y); // Nota: revisá si el nombre es bloqueFirmas o bloqueFiremas en tu código original
+    bloqueFiremas(doc, y); 
     piePDF(doc, nroAcuerdo);
 
-    // Descarga del archivo
-    doc.save("Acuerdo_Cancelatorio_" + nombre.replace(/\s+/g, "_") + "_" + nroAcuerdo + ".pdf");
+    doc.save(`Acuerdo_${esTDC ? "TDC_" : ""}${nombre.replace(/\s+/g, "_")}.pdf`);
 }
 
 /** 4. CAMPAÑA DE QUITAS **/
@@ -443,9 +472,24 @@ function generarEscalaQuitas() {
 function copiarChatQuita(monto, porcReal, btn) {
     const nombre = document.getElementById("nombreInput").value || "Titular";
     const dni = document.getElementById("dniInput").value || "-";
-    const datosPago = "\n\nCBU: 3840100200000004686158\nALIAS: UALEOMICUOTA\nRAZÓN SOCIAL: ALAU TECNOLOGÍA S.A.U";
     
-    const mensaje = `Hola ${nombre}, DNI: ${dni}. Logré gestionarle un beneficio del ${porcReal}% de quita sobre el saldo pendiente total, para que pueda regularizar su situación.
+    // 1. Detectar el modo TDC desde el switch
+    const esTDC = document.getElementById("esTarjetaCredito")?.checked || false;
+
+    // 2. Definir variables dinámicas (CBU, Alias y Aclaraciones)
+    const producto = esTDC ? "su Tarjeta de Crédito" : "su saldo pendiente total";
+    
+    // Datos de pago según el caso (Usando el CBU de prueba que te pasaron)
+    const cbu = esTDC ? "3840200500000049624900" : "3840100200000004686158";
+    const alias = esTDC ? "ACUERDO.UALABANK.TDC" : "UALEOMICUOTA";
+    const razonSocial = esTDC ? "UALABANK S.A.U." : "ALAU TECNOLOGÍA S.A.U";
+
+    // Aclaración específica al final
+    const advertenciaFinal = esTDC 
+        ? "Este beneficio es exclusivo para deudas de tarjeta de crédito e impacta directamente en su límite."
+        : "Este beneficio no aplica a deudas de tarjeta de crédito. Durante el período de acreditación (72 hs) no debe utilizar la cuenta.";
+
+    const mensaje = `Hola ${nombre}, DNI: ${dni}. Logré gestionarle un beneficio del ${porcReal}% de quita sobre ${producto}, para que pueda regularizar su situación.
 
 El monto final para cancelar es de $${monto.toLocaleString("es-AR")}
 
@@ -453,11 +497,14 @@ El beneficio vence en 48 hs, ¿le interesa aprovecharlo? Si necesita ayuda, ¡av
 Confirme hoy antes de que se cierre este chat y pierda la oportunidad.
 
 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
-${datosPago}
 
-Importante: debe avisar antes de pagar y enviar el comprobante por esta vía. A las 72 hs hábiles verá el pago reflejado en la app.
-Durante ese período no debe utilizar la cuenta.
-Este beneficio no aplica a deudas de tarjeta de crédito.
+CBU: ${cbu}
+ALIAS: ${alias}
+RAZÓN SOCIAL: ${razonSocial}
+
+Importante: debe avisar antes de pagar y enviar el comprobante por esta vía. 
+${advertenciaFinal}
+
 Quedo a disposición.`;
     
     navigator.clipboard.writeText(mensaje).then(() => {
