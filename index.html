@@ -172,7 +172,7 @@
                     <label for="tipoProductoQuita">Tipo de producto</label>
                     <div class="input-wrapper">
                         <span class="currency-symbol">💼</span>
-                        <select id="tipoProductoQuita" style="padding: 12px 14px 12px 45px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; color:white; width:100%; box-sizing:border-box; appearance:none;">
+                        <select id="tipoProductoQuita" onchange="actualizarBotonRefinanciar()" style="padding: 12px 14px 12px 45px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; color:white; width:100%; box-sizing:border-box; appearance:none;">
                             <option value="prestamo">Préstamo / Cuotificación</option>
                             <option value="tarjeta">Tarjeta de crédito</option>
                         </select>
@@ -205,8 +205,8 @@
             </div>
 
             <div id="contenedorSalto" style="display:none; margin-top: 25px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
-                <p style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 10px;">¿No acepta pago único?</p>
-                <button onclick="saltarACuotas()" class="btn-main" style="background: rgba(56, 189, 248, 0.1); color: var(--primary); border: 1px solid var(--primary);">
+                <p id="textoSalto" style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 10px;">¿No acepta pago único?</p>
+                <button id="btnRefinanciar" onclick="saltarACuotas()" class="btn-main" style="background: rgba(56, 189, 248, 0.1); color: var(--primary); border: 1px solid var(--primary);">
                     Refinanciar sobre Total →
                 </button>
             </div>

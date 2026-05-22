@@ -447,6 +447,30 @@ function generarEscalaQuitas() {
 
     document.getElementById("infoEscala").innerHTML = `<p>Escala autorizada para ${diasMora} días de mora.</p>`;
     document.getElementById("contenedorSalto").style.display = "block";
+    actualizarBotonRefinanciar();
+}
+
+/** Habilita/deshabilita el botón "Refinanciar sobre Total" según el tipo de producto.
+ *  Tarjeta de crédito NO admite plan de cuotas → botón bloqueado. */
+function actualizarBotonRefinanciar() {
+    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
+    const btn = document.getElementById("btnRefinanciar");
+    const texto = document.getElementById("textoSalto");
+    if (!btn || !texto) return;
+
+    if (tipo === "tarjeta") {
+        btn.disabled = true;
+        btn.style.opacity = "0.4";
+        btn.style.cursor = "not-allowed";
+        btn.title = "La tarjeta de crédito no admite plan de cuotas";
+        texto.innerHTML = '⚠️ La tarjeta de crédito <strong>no admite</strong> refinanciación en cuotas. Solo pago único con quita.';
+    } else {
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+        btn.title = "";
+        texto.innerHTML = "¿No acepta pago único?";
+    }
 }
 
 function copiarChatQuita(monto, porcReal, btn) {
@@ -519,6 +543,13 @@ Quedo a disposición.`;
 }
 
 function saltarACuotas() {
+    // Red de seguridad: la tarjeta de crédito no admite plan de cuotas
+    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
+    if (tipo === "tarjeta") {
+        alert("La tarjeta de crédito no admite refinanciación en cuotas. Solo se puede ofrecer pago único con quita.");
+        return;
+    }
+
     const totalCargado = document.getElementById("totalConInteresInput").value;
     if (!totalCargado) {
         alert("Por favor, cargue el Saldo Total antes de refinanciar.");
