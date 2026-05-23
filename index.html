@@ -273,6 +273,17 @@
                     <input type="date" id="fechaVencManualInput" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
                     <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
                 </div>
+
+                <div style="margin-top: 15px;">
+                    <label for="tipoProductoManual">Tipo de producto</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">💼</span>
+                        <select id="tipoProductoManual" style="padding: 12px 14px 12px 45px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; color:white; width:100%; box-sizing:border-box; appearance:none;">
+                            <option value="prestamo">Préstamo / Cuotificación</option>
+                            <option value="tarjeta">Tarjeta de crédito</option>
+                        </select>
+                    </div>
+                </div>
                 
                 <button onclick="generarPDFPuroManual()" class="btn-main" style="width: 100%; margin-top: 15px;">📄 VALIDAR Y GENERAR ACUERDO</button>
             </div>
