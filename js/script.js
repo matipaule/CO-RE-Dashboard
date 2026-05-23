@@ -212,7 +212,7 @@ function bloqueCliente(doc, nombre, dni, y) {
     return y + 33;
 }
 
-function bloquePago(doc, y) {
+function bloquePago(doc, y, tipo) {
     const W = 210, M = 20;
     doc.setFillColor(10, 30, 50);
     doc.roundedRect(M, y, W - M * 2, 34, 3, 3, "F");
@@ -224,7 +224,12 @@ function bloquePago(doc, y) {
     doc.setFont("helvetica", "bold");
     doc.text("DATOS PARA EL PAGO — TRANSFERENCIA BANCARIA OBLIGATORIA", M + 6, y + 8);
     doc.setFont("helvetica", "normal");
-    const items = [
+    const items = tipo === "tarjeta" ? [
+        ["Razón Social:", "ALAU TECNOLOGÍA S.A.U."],
+        ["CUIT:", "30-71542170-0"],
+        ["CBU:", "3840200500000049624900"],
+        ["Alias:", "ACUERDO.UALABANK.TDC"],
+    ] : [
         ["Razón Social:", "ALAU TECNOLOGÍA S.A.U."],
         ["CUIT:", "30-71542170-0"],
         ["CBU:", "3840100200000004686158"],
@@ -306,11 +311,15 @@ function generarPDFQuita(montoFinal, porcReal) {
         return;
     }
 
+    // Tipo de producto: préstamo o tarjeta
+    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
+
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const W = 210, M = 20;
 
-    const hoy = encabezadoPDF(doc, "Acuerdo Cancelatorio");
+    const tituloDoc = tipo === "tarjeta" ? "Acuerdo Cancelatorio — Tarjeta" : "Acuerdo Cancelatorio";
+    const hoy = encabezadoPDF(doc, tituloDoc);
     const nroAcuerdo = "QUI-" + hoy.getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
 
     // Número de acuerdo en rojo suave arriba
@@ -331,14 +340,17 @@ function generarPDFQuita(montoFinal, porcReal) {
     doc.setFillColor(30, 41, 59);
     doc.roundedRect(M, y, W - M * 2, 64, 3, 3, "F");
     
-    doc.setTextColor(220, 38, 38); // Rojo para el título del bloque
+    doc.setTextColor(220, 38, 38);
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
     doc.text("CONDICIONES DEL ACUERDO CANCELATORIO", M + 6, y + 8);
 
-    // Estructura de ítems corregida
+    const tipoDesc = tipo === "tarjeta"
+        ? "Cancelación de deuda de Tarjeta de Crédito"
+        : "Cancelación total con descuento por pago único (Préstamo)";
+
     const items = [
-        ["Tipo:", "Cancelación total con descuento por pago único"],
+        ["Tipo:", tipoDesc],
         ["Saldo Total Actual:", "$" + totalConInteres.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Monto final a abonar:", "$" + montoFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Descuento aplicado:", porcReal + "% sobre el saldo total"],
@@ -350,20 +362,15 @@ function generarPDFQuita(montoFinal, porcReal) {
     items.forEach(([label, val], i) => {
         const ry = y + 17 + i * 6;
         
-        // Color para las etiquetas (Labels)
-        doc.setTextColor(148, 163, 184); // Gris azulado
+        doc.setTextColor(148, 163, 184);
         doc.setFontSize(8.5);
         doc.text(label, M + 6, ry);
 
-        // Lógica de colores para los valores
-        let color = [248, 250, 252]; // Blanco por defecto
-        
+        let color = [248, 250, 252];
         if (label === "Monto final a abonar:") {
-            color = [34, 197, 94]; // VERDE resaltado
-        } else if (label === "importe descontado:") {
-            color = [180, 163, 15]; // BLANCO (para no confundir con el pago)
+            color = [34, 197, 94];
         } else if (label === "Vencimiento de la oferta:") {
-            color = [34, 197, 94]; // VERDE
+            color = [34, 197, 94];
         }
 
         doc.setTextColor(...color);
@@ -374,23 +381,26 @@ function generarPDFQuita(montoFinal, porcReal) {
 
     y += 71;
 
-    // Bloques adicionales (deben estar definidos en tu script global)
-    y = bloquePago(doc, y);
+    // Bloque de pago con datos según tipo de producto
+    y = bloquePago(doc, y, tipo);
+
+    const clausula4 = tipo === "tarjeta"
+        ? "4. La rehabilitación de la tarjeta solo ocurre si el pago se realiza antes de los 30 días de atraso. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta."
+        : "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
 
     const clausulas = [
         "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
         "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
-        "4. Este beneficio no aplica a deudas de tarjeta de crédito. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.",
+        clausula4,
         "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
         "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
     ];
     
     y = bloqueTerminos(doc, clausulas, y);
-    bloqueFiremas(doc, y); // Nota: revisá si el nombre es bloqueFirmas o bloqueFiremas en tu código original
+    bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 
-    // Descarga del archivo
     doc.save("Acuerdo_Cancelatorio_" + nombre.replace(/\s+/g, "_") + "_" + nroAcuerdo + ".pdf");
 }
 
@@ -682,6 +692,9 @@ function generarPDFPuroManual() {
         return;
     }
 
+    // Tipo de producto: préstamo o tarjeta
+    const tipo = document.getElementById("tipoProductoManual")?.value || "prestamo";
+
     // 2. Limpieza EXTREMA de números
     function limpiarPlata(valor) {
         let sinLetrasNiSignos = valor.replace(/[^0-9.,-]/g, ""); 
@@ -736,8 +749,9 @@ function generarPDFPuroManual() {
     const W = 210, M = 20;
     
     // Encabezado global
+    const tituloDoc = tipo === "tarjeta" ? "PROPUESTA DE PAGO ÚNICO — TARJETA" : "PROPUESTA DE PAGO ÚNICO — PRÉSTAMO";
     if (typeof encabezadoPDF === "function") {
-        encabezadoPDF(doc, "PROPUESTA DE PAGO ÚNICO");
+        encabezadoPDF(doc, tituloDoc);
     }
     const nroAcuerdo = "MAN-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
 
@@ -766,8 +780,12 @@ function generarPDFPuroManual() {
     doc.setTextColor(56, 189, 248);
     doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
 
+    const tipoDesc = tipo === "tarjeta"
+        ? "Cancelación de deuda de Tarjeta de Crédito"
+        : "Cancelación total con descuento por pago único (Préstamo)";
+
     const items = [
-        ["Tipo:", "Cancelación total con descuento por pago único"],
+        ["Tipo:", tipoDesc],
         ["Saldo Total Actual:", `$${saldoTotal.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
         ["Importe descontado:", `$${ahorro.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
         ["Monto final a abonar:", `$${montoPagar.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
@@ -799,19 +817,23 @@ function generarPDFPuroManual() {
 
     y += 63; 
     
-    // Llamada a los bloques comunes (CBU, Términos y Firmas)
-    y = bloquePago(doc, y); 
+    // Llamada a los bloques comunes con tipo de producto
+    y = bloquePago(doc, y, tipo); 
+
+    const clausula4 = tipo === "tarjeta"
+        ? "4. La rehabilitación de la tarjeta solo ocurre si el pago se realiza antes de los 30 días de atraso. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta."
+        : "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones (tarjeta de crédito, en caso de poseer, está excluida). Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
 
     const clausulas = [
         "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
         "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
-        "4. Este beneficio no aplica a deudas de tarjeta de crédito. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.",
+        clausula4,
         "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
         "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
     ];
     y = bloqueTerminos(doc, clausulas, y);
-    bloqueFiremas(doc, y); // Utiliza exactamente tu función bloqueFiremas
+    bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 
     doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
