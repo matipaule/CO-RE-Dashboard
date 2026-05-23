@@ -224,16 +224,21 @@ function bloquePago(doc, y, tipo) {
     doc.setFont("helvetica", "bold");
     doc.text("DATOS PARA EL PAGO — TRANSFERENCIA BANCARIA OBLIGATORIA", M + 6, y + 8);
     doc.setFont("helvetica", "normal");
-    const items = tipo === "tarjeta" ? [
+
+    var cbu, alias;
+    if (tipo === "tarjeta") {
+        cbu = "3840200500000049624900";
+        alias = "ACUERDO.UALABANK.TDC";
+    } else {
+        cbu = "3840100200000004686158";
+        alias = "UALEOMICUOTA";
+    }
+
+    const items = [
         ["Razón Social:", "ALAU TECNOLOGÍA S.A.U."],
         ["CUIT:", "30-71542170-0"],
-        ["CBU:", "3840200500000049624900"],
-        ["Alias:", "ACUERDO.UALABANK.TDC"],
-    ] : [
-        ["Razón Social:", "ALAU TECNOLOGÍA S.A.U."],
-        ["CUIT:", "30-71542170-0"],
-        ["CBU:", "3840100200000004686158"],
-        ["Alias:", "UALEOMICUOTA"],
+        ["CBU:", cbu],
+        ["Alias:", alias],
     ];
     items.forEach(([l, v], i) => {
         const ry = y + 16 + i * 5;
@@ -302,7 +307,7 @@ function bloqueFiremas(doc, y) {
     doc.text("Firma y Sello CO-RE", inicioDerecha, lineaY + 5);
 }
 
-function generarPDFQuita(montoFinal, porcReal) {
+function generarPDFQuita(montoFinal, porcReal, tipoParam) {
     const nombre = document.getElementById("nombreInput")?.value || "";
     const dni = document.getElementById("dniInput")?.value || "";
     
@@ -311,8 +316,16 @@ function generarPDFQuita(montoFinal, porcReal) {
         return;
     }
 
-    // Tipo de producto: préstamo o tarjeta
-    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
+    // Prioridad: parámetro directo del botón > selector del DOM > default préstamo
+    var tipo;
+    if (tipoParam === "tarjeta") {
+        tipo = "tarjeta";
+    } else if (tipoParam === "prestamo") {
+        tipo = "prestamo";
+    } else {
+        var selQuita = document.getElementById("tipoProductoQuita");
+        tipo = (selQuita && selQuita.value === "tarjeta") ? "tarjeta" : "prestamo";
+    }
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -416,6 +429,11 @@ function generarEscalaQuitas() {
     const totalConInteres = parseFloat(totalInput.replace(/\./g, "").replace(",", "."));
     const diasMora = parseInt(moraInput);
 
+    // Capturar el tipo AL MOMENTO DE CALCULAR, no cuando se hace click en PDF
+    const tipoSeleccionado = document.getElementById("tipoProductoQuita")
+        ? document.getElementById("tipoProductoQuita").value
+        : "prestamo";
+
     let limiteUala = 0;
     if (diasMora >= 180) limiteUala = 70;
     else if (diasMora >= 150) limiteUala = 40;
@@ -445,7 +463,7 @@ function generarEscalaQuitas() {
                 <td><span style="color: #10b981; font-weight: bold;">${labelQuita}</span></td>
                 <td><strong>$${montoFinal.toLocaleString("es-AR")}</strong></td>
                 <td><button class="copiar-btn" onclick="copiarChatQuita(${montoFinal}, ${porcRealTotal}, this)">Copiar</button></td>
-                <td><button class="copiar-btn" style="background:rgba(56,189,248,0.15);" onclick="generarPDFQuita(${montoFinal}, ${porcRealTotal})">📄 PDF</button></td>
+                <td><button class="copiar-btn" style="background:rgba(56,189,248,0.15);" onclick="generarPDFQuita(${montoFinal}, ${porcRealTotal}, '${tipoSeleccionado}')">📄 PDF</button></td>
             `;
             tablaBody.appendChild(fila);
         }
@@ -693,7 +711,13 @@ function generarPDFPuroManual() {
     }
 
     // Tipo de producto: préstamo o tarjeta
-    const tipo = document.getElementById("tipoProductoManual")?.value || "prestamo";
+    var tipo;
+    var selManual = document.getElementById("tipoProductoManual");
+    if (selManual && selManual.value === "tarjeta") {
+        tipo = "tarjeta";
+    } else {
+        tipo = "prestamo";
+    }
 
     // 2. Limpieza EXTREMA de números
     function limpiarPlata(valor) {
