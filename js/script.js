@@ -212,8 +212,53 @@ function bloqueCliente(doc, nombre, dni, y) {
     return y + 33;
 }
 
-function bloquePago(doc, y, tipo) {
+/** Devuelve los datos bancarios correctos según el tipo de producto y si hay quita.
+ *  - Préstamo (con o sin quita)        → UALEOMICUOTA (ALAU TECNOLOGÍA S.A.U.)
+ *  - Tarjeta + CON quita                → ACUERDO.UALABANK.TDC (ALAU TECNOLOGÍA S.A.U.)
+ *  - Tarjeta + SIN quita (pago total)   → WILOBANK S.A.U.
+ */
+function obtenerDatosCuenta(tipo, conQuita) {
+    if (tipo === "tarjeta" && !conQuita) {
+        return {
+            razonSocial: "UALA BANK S.A.U.",
+            cuit: "30-71565463-2",
+            cbu: "3840100200000000619567",
+            alias: null,
+            banco: "UALÁ BANK S.A.U."
+        };
+    }
+    if (tipo === "tarjeta") {
+        return {
+            razonSocial: "UALA BANK S.A.U.",
+            cuit: "30-71565463-2",
+            cbu: "3840200500000049624900",
+            alias: "ACUERDO.UALABANK.TDC",
+            banco: "UALÁ BANK S.A.U."
+        };
+    }
+    return {
+        razonSocial: "ALAU TECNOLOGÍA S.A.U.",
+        cuit: "30-71542170-0",
+        cbu: "3840100200000004686158",
+        alias: "UALEOMICUOTA",
+        banco: "UALÁ"
+    };
+}
+
+/** Texto formateado para insertar en mensajes de WhatsApp (copiar/pegar). */
+function obtenerDatosCuentaTexto(tipo, conQuita) {
+    const d = obtenerDatosCuenta(tipo, conQuita);
+    let txt = `CBU: ${d.cbu}`;
+    if (d.alias) txt += `\nAlias: ${d.alias}`;
+    txt += `\nRazón Social: ${d.razonSocial}\nCUIT: ${d.cuit}`;
+    if (!d.alias) txt += `\nBanco: ${d.banco}`;
+    return txt;
+}
+
+function bloquePago(doc, y, tipo, conQuita) {
     const W = 210, M = 20;
+    const datos = obtenerDatosCuenta(tipo, conQuita);
+
     doc.setFillColor(10, 30, 50);
     doc.roundedRect(M, y, W - M * 2, 34, 3, 3, "F");
     doc.setDrawColor(220, 38, 38);
@@ -225,21 +270,21 @@ function bloquePago(doc, y, tipo) {
     doc.text("DATOS PARA EL PAGO — TRANSFERENCIA BANCARIA OBLIGATORIA", M + 6, y + 8);
     doc.setFont("helvetica", "normal");
 
-    var cbu, alias;
-    if (tipo === "tarjeta") {
-        cbu = "3840200500000049624900";
-        alias = "ACUERDO.UALABANK.TDC";
-    } else {
-        cbu = "3840100200000004686158";
-        alias = "UALEOMICUOTA";
-    }
+    // Si no hay alias (Wilobank), mostramos "Banco" en su lugar
+    const items = datos.alias
+        ? [
+            ["Razón Social:", datos.razonSocial],
+            ["CUIT:", datos.cuit],
+            ["CBU:", datos.cbu],
+            ["Alias:", datos.alias],
+        ]
+        : [
+            ["Razón Social:", datos.razonSocial],
+            ["CUIT:", datos.cuit],
+            ["CBU:", datos.cbu],
+            ["Banco:", datos.banco],
+        ];
 
-    const items = [
-        ["Razón Social:", "ALAU TECNOLOGÍA S.A.U."],
-        ["CUIT:", "30-71542170-0"],
-        ["CBU:", cbu],
-        ["Alias:", alias],
-    ];
     items.forEach(([l, v], i) => {
         const ry = y + 16 + i * 5;
         doc.setTextColor(148, 163, 184);
@@ -394,8 +439,9 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam) {
 
     y += 71;
 
-    // Bloque de pago con datos según tipo de producto
-    y = bloquePago(doc, y, tipo);
+    // Bloque de pago — toda la solapa Quitas usa la cuenta CON quita.
+    // La cuenta SIN quita solo aplica desde el PDF Manual.
+    y = bloquePago(doc, y, tipo, true);
 
     const clausula4 = tipo === "tarjeta"
         ? "4. La rehabilitación de la tarjeta solo ocurre si el pago se realiza antes de los 30 días de atraso. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta."
@@ -520,20 +566,9 @@ function copiarChatQuita(monto, porcReal, btn) {
     const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
 
     // ─── Datos de pago según producto ───────────────────────────────────────
-    // ⚠️ TODO: completar CBU/Alias reales para tarjeta cuando los tengas.
-    const DATOS_PAGO_PRESTAMO =
-`CBU: 3840100200000004686158
-Alias: UALEOMICUOTA
-Razón Social: ALAU TECNOLOGÍA S.A.U.
-CUIT: 30-71542170-0`;
-
-    const DATOS_PAGO_TARJETA =
-`CBU: 3840200500000049624900
-Alias: ACUERDO.UALABANK.TDC
-Razón Social: ALAU TECNOLOGÍA S.A.U.
-CUIT: 30-71542170-0`;
-
-    const datosPago = tipo === "tarjeta" ? DATOS_PAGO_TARJETA : DATOS_PAGO_PRESTAMO;
+    // Todo lo que pasa por la solapa Quitas (incluida quita solo de intereses)
+    // usa la cuenta CON quita. La cuenta SIN quita solo se aplica desde el Manual.
+    const datosPago = obtenerDatosCuentaTexto(tipo, true);
 
     const disclaimer = tipo === "tarjeta"
         ? "⚠️ Este beneficio aplica a tu deuda de TARJETA DE CRÉDITO."
@@ -676,8 +711,9 @@ function generarPDFCuotas(numCuotas, valorCuota) {
         doc.text(val, M + 60, ry);
     });
 
-    y += 68; 
-    y = bloquePago(doc, y); 
+    y += 68;
+    // Cuotas Uala: solo aplica a préstamos/cuotificaciones, sin quita
+    y = bloquePago(doc, y, "prestamo", false);
 
     const clausulas = [
         "1. El atraso en el pago de cualquier cuota anulará el beneficio.",
@@ -841,8 +877,13 @@ function generarPDFPuroManual() {
 
     y += 63; 
     
-    // Llamada a los bloques comunes con tipo de producto
-    y = bloquePago(doc, y, tipo); 
+    // ¿Hay quita real sobre el CAPITAL? (no solo intereses)
+    // Si el monto a pagar es menor al capital → hay descuento sobre capital → CON quita.
+    // Si el monto = capital o > capital → solo intereses o sin descuento → SIN quita.
+    const conQuita = montoPagar < capital;
+
+    // Llamada a los bloques comunes con tipo de producto + flag de quita
+    y = bloquePago(doc, y, tipo, conQuita); 
 
     const clausula4 = tipo === "tarjeta"
         ? "4. La rehabilitación de la tarjeta solo ocurre si el pago se realiza antes de los 30 días de atraso. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta."
