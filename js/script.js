@@ -877,10 +877,10 @@ function generarPDFPuroManual() {
 
     y += 63; 
     
-    // ¿Hay quita real sobre el CAPITAL? (no solo intereses)
-    // Si el monto a pagar es menor al capital → hay descuento sobre capital → CON quita.
-    // Si el monto = capital o > capital → solo intereses o sin descuento → SIN quita.
-    const conQuita = montoPagar < capital;
+    // ¿Hay quita?
+    // - Monto a cancelar IGUAL al Saldo Total Actual (con intereses) → SIN quita (pago completo).
+    // - Monto a cancelar MENOR que el Saldo Total Actual → CON quita (hubo descuento).
+    const conQuita = montoPagar < saldoTotal;
 
     // Llamada a los bloques comunes con tipo de producto + flag de quita
     y = bloquePago(doc, y, tipo, conQuita); 
