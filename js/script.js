@@ -126,10 +126,10 @@ function copiarPlan(c, v, btn) {
 ⚠️ Este beneficio incluye exclusivamente préstamos y cuotificaciones.(tarjeta de credito, en caso de poseer, esta excluido)
 
 💳 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
-CBU: 3840100200000004686158
-Alias: UALEOMICUOTA
-Razón Social: ALAU TECNOLOGÍA S.A.U.
-CUIT: 30-71542170-0
+CBU: 3840200500000045539941
+Alias: UALABANK.PMO
+Razón Social: UALÁ BANK S.A.U.
+CUIT: 30-71565463-2
 
 Importante: avisame antes de pagar y enviame el comprobante por esta vía.
 Quedo a disposición.`;
@@ -213,7 +213,7 @@ function bloqueCliente(doc, nombre, dni, y) {
 }
 
 /** Devuelve los datos bancarios correctos según el tipo de producto y si hay quita.
- *  - Préstamo (con o sin quita)        → UALEOMICUOTA (ALAU TECNOLOGÍA S.A.U.)
+ *  - Préstamo (con o sin quita)        → UALABANK.PMO (UALÁ BANK S.A.U. / WILOBANK SAU)
  *  - Tarjeta + CON quita                → ACUERDO.UALABANK.TDC (ALAU TECNOLOGÍA S.A.U.)
  *  - Tarjeta + SIN quita (pago total)   → WILOBANK S.A.U.
  */
@@ -237,11 +237,11 @@ function obtenerDatosCuenta(tipo, conQuita) {
         };
     }
     return {
-        razonSocial: "ALAU TECNOLOGÍA S.A.U.",
-        cuit: "30-71542170-0",
-        cbu: "3840100200000004686158",
-        alias: "UALEOMICUOTA",
-        banco: "UALÁ"
+        razonSocial: "UALÁ BANK S.A.U.",
+        cuit: "30-71565463-2",
+        cbu: "3840200500000045539941",
+        alias: "UALABANK.PMO",
+        banco: "WILOBANK SAU"
     };
 }
 
@@ -480,20 +480,26 @@ function generarEscalaQuitas() {
         ? document.getElementById("tipoProductoQuita").value
         : "prestamo";
 
+    // Política de quitas por días de mora:
+    //   < 60 días        → NO se permite ninguna quita
+    //   60 a 119 días    → solo quita de intereses (sin tocar capital)
+    //   120 / 150 / 180  → quita de intereses + capital (30% / 40% / 70%)
+    const sinQuita = diasMora < 60;
     let limiteUala = 0;
     if (diasMora >= 180) limiteUala = 70;
     else if (diasMora >= 150) limiteUala = 40;
     else if (diasMora >= 120) limiteUala = 30;
-    else if (diasMora >= 90) limiteUala = 20;
+    // 60 a 119 días: limiteUala = 0 → solo quita de intereses
 
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
-    
+
     const escalones = [0, 10, 20, 30, 40, 50, 60, 70];
     let opcionesMostradas = 0;
 
     escalones.forEach(porc => {
-        if (porc === 0 || porc <= limiteUala || (porc === 10 && limiteUala === 0)) {
+        if (sinQuita) return; // menos de 60 días de mora: no se autoriza ninguna quita
+        if (porc === 0 || porc <= limiteUala) {
             opcionesMostradas++;
 
             const montoFinal = Math.ceil(capital * (1 - porc / 100));
@@ -515,11 +521,15 @@ function generarEscalaQuitas() {
         }
     });
 
-    if (opcionesMostradas === 0) {
+    if (sinQuita) {
+        tablaBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;">⛔ Con menos de 60 días de mora no hay quita autorizada. Gestionar pago del total: $${totalConInteres.toLocaleString("es-AR")}</td></tr>`;
+    } else if (opcionesMostradas === 0) {
         tablaBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;">Solo quita de intereses. Pago único sugerido: $${capital.toLocaleString("es-AR")}</td></tr>`;
     }
 
-    document.getElementById("infoEscala").innerHTML = `<p>Escala autorizada para ${diasMora} días de mora.</p>`;
+    document.getElementById("infoEscala").innerHTML = sinQuita
+        ? `<p>Sin quita autorizada para ${diasMora} días de mora (mínimo 60 días).</p>`
+        : `<p>Escala autorizada para ${diasMora} días de mora.</p>`;
     document.getElementById("contenedorSalto").style.display = "block";
     actualizarBotonRefinanciar();
 }
@@ -625,7 +635,7 @@ function saltarACuotas() {
 
 /** 5. DATOS DE PAGO **/
 function copiarTodoPago() {
-    const info = `RAZÓN SOCIAL: ALAU TECNOLOGIA S.A.U.\nCUIT: 30-71542170-0\nCBU: 3840100200000004686158\nALIAS: UALEOMICUOTA`;
+    const info = `RAZÓN SOCIAL: UALÁ BANK S.A.U.\nCUIT: 30-71565463-2\nCBU: 3840200500000045539941\nALIAS: UALABANK.PMO\nBANCO: WILOBANK SAU`;
     navigator.clipboard.writeText(info).then(() => {
         alert("¡Todos los datos de pago copiados!");
     });
