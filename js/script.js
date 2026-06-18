@@ -482,14 +482,15 @@ function generarEscalaQuitas() {
 
     // Política de quitas por días de mora:
     //   < 60 días        → NO se permite ninguna quita
-    //   60 a 119 días    → solo quita de intereses (sin tocar capital)
-    //   120 / 150 / 180  → quita de intereses + capital (30% / 40% / 70%)
+    //   60 a 89 días     → solo quita de intereses (sin tocar capital)
+    //   90 / 120 / 150 / 180 → quita de intereses + capital (20% / 30% / 40% / 70%)
     const sinQuita = diasMora < 60;
     let limiteUala = 0;
     if (diasMora >= 180) limiteUala = 70;
     else if (diasMora >= 150) limiteUala = 40;
     else if (diasMora >= 120) limiteUala = 30;
-    // 60 a 119 días: limiteUala = 0 → solo quita de intereses
+    else if (diasMora >= 90) limiteUala = 20;
+    // 60 a 89 días: limiteUala = 0 → solo quita de intereses
 
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
