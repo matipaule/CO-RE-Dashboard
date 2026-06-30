@@ -80,6 +80,16 @@ function calcularCuotas() {
         return;
     }
 
+    // Validación: mínimo 90 días de mora para calcular cuotas
+    const diasMoraCuotas = parseInt(document.getElementById("moraInputCuotas")?.value) || 0;
+    if (diasMoraCuotas < 90) {
+        const msg = diasMoraCuotas > 0
+            ? `⚠️ Este caso tiene ${diasMoraCuotas} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.\n\nEsperá hasta cumplir los 90 días para evitar reformulaciones por intereses generados.`
+            : `⚠️ Ingresá los días de mora antes de calcular cuotas.\n\nLas cuotas solo se pueden ofrecer a partir de los 90 días de mora.`;
+        alert(msg);
+        return;
+    }
+
     const redondeado = Math.ceil(saldo);
     document.getElementById("saldoRedondeado").innerHTML = `Base: <strong>$${redondeado.toLocaleString("es-AR")}</strong>`;
 
@@ -623,6 +633,19 @@ function saltarACuotas() {
         alert("La tarjeta de crédito no admite refinanciación en cuotas. Solo se puede ofrecer pago único con quita.");
         return;
     }
+
+    // Validación: mínimo 90 días de mora para cuotas
+    const diasMoraSaltar = parseInt(document.getElementById("moraInput")?.value) || 0;
+    if (diasMoraSaltar < 90) {
+        const msg = diasMoraSaltar > 0
+            ? `⚠️ Este caso tiene ${diasMoraSaltar} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.\n\nEsperá hasta cumplir los 90 días para evitar reformulaciones por intereses generados.`
+            : `⚠️ Ingresá los días de mora antes de pasar a cuotas.\n\nLas cuotas solo se pueden ofrecer a partir de los 90 días de mora.`;
+        alert(msg);
+        return;
+    }
+    // Sincronizar días de mora al campo de cuotas para que la validación allá también funcione
+    const moraInputCuotas = document.getElementById("moraInputCuotas");
+    if (moraInputCuotas) moraInputCuotas.value = diasMoraSaltar;
 
     const totalCargado = document.getElementById("totalConInteresInput").value;
     if (!totalCargado) {
