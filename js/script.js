@@ -126,13 +126,15 @@ function copiarPlan(c, v, btn) {
     const nombre = (document.getElementById("nombreCuotaInput")?.value || "").trim();
     const saludo = nombre ? `Hola ${nombre}, ` : "Hola, ";
 
+    const fechaVenc = obtenerFechaVenc("fechaVencInput");
+
     const txt = `${saludo}logré gestionarle un beneficio de cuotificación SIN INTERÉS sobre su deuda total (saldo vencido + cuotas a vencer).
 
 📋 Detalle de la propuesta:
 • Monto total a financiar: $${totalFinanciado.toLocaleString("es-AR")}
 • Plan: ${c} cuotas fijas de $${v.toLocaleString("es-AR")} (sin interés)
 
-⏰ Tiene que confirmar dentro de las próximas 48 hs para conservar el beneficio. Pasado ese plazo, la oferta caduca automáticamente y vuelve a la deuda original informada.
+⏰ Tiene tiempo de confirmar y abonar hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
 ⚠️ Este beneficio incluye exclusivamente préstamos y cuotificaciones.(tarjeta de credito, en caso de poseer, esta excluido)
 
 💳 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
@@ -586,6 +588,10 @@ function copiarChatQuita(monto, porcReal, btn) {
     // Tipo de producto: préstamo o tarjeta
     const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
 
+    // Días de mora y fecha de vencimiento elegida por el operador
+    const diasMora = parseInt(document.getElementById("moraInput")?.value) || 0;
+    const fechaVenc = obtenerFechaVenc("fechaVencInputQuita");
+
     // ─── Datos de pago según producto ───────────────────────────────────────
     // Todo lo que pasa por la solapa Quitas (incluida quita solo de intereses)
     // usa la cuenta CON quita. La cuenta SIN quita solo se aplica desde el Manual.
@@ -604,10 +610,11 @@ function copiarChatQuita(monto, porcReal, btn) {
 📋 Detalle de la propuesta:
 • Saldo total adeudado (con intereses): $${totalOriginal.toLocaleString("es-AR")}
 • Saldo capital: $${saldoCapital.toLocaleString("es-AR")}
+• Días de mora: ${diasMora}
 ${lineaPorcentajes}
 • Monto final a cancelar: $${monto.toLocaleString("es-AR")}
 
-⏰ Tiene que confirmar dentro de las próximas 48 hs para conservar el beneficio. Pasado ese plazo, la oferta caduca automáticamente y vuelve a la deuda original informada.
+⏰ Tiene tiempo de confirmar y abonar hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
 
 ${disclaimer}
 
@@ -935,5 +942,5 @@ function generarPDFPuroManual() {
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 
-    doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
-}
+  }
+doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
