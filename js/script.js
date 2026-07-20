@@ -905,7 +905,7 @@ function generarPDFPuroManual() {
         // Lógica de colores para los montos importantes
         let color = [255, 255, 255]; 
         
-        if (label === "Monto final a abonar:" || label === "Vencimiento de la oferta:") {
+        if (label === "Monto final a abonar:" || label === "Vencimiento:") {
             color = [34, 197, 94]; // VERDE
         } else if (label === "Bonificación a favor:" || label === "Descuento aplicado:") {
             color = [245, 158, 11]; // AMARILLO/NARANJA
@@ -942,5 +942,5 @@ function generarPDFPuroManual() {
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 
-  }
-doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
+    doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
+}
