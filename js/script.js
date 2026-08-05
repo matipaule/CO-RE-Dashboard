@@ -495,10 +495,11 @@ function generarEscalaQuitas() {
     // Política de quitas por días de mora:
     //   < 60 días        → NO se permite ninguna quita
     //   60 a 89 días     → solo quita de intereses (sin tocar capital)
-    //   90 / 120 / 150 / 180 → quita de intereses + capital (20% / 30% / 40% / 70%)
+    //   90 / 120 / 150 / 180 → quita de intereses + capital (20% / 30% / 40% / 50%)
+    //   TOPE MÁXIMO AUTORIZADO POR UALÁ: 50% de capital (+180 días). Antes era 70%.
     const sinQuita = diasMora < 60;
     let limiteUala = 0;
-    if (diasMora >= 180) limiteUala = 70;
+    if (diasMora >= 180) limiteUala = 50;
     else if (diasMora >= 150) limiteUala = 40;
     else if (diasMora >= 120) limiteUala = 30;
     else if (diasMora >= 90) limiteUala = 20;
@@ -507,7 +508,7 @@ function generarEscalaQuitas() {
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
 
-    const escalones = [0, 10, 20, 30, 40, 50, 60, 70];
+    const escalones = [0, 10, 20, 30, 40, 50];
     let opcionesMostradas = 0;
 
     escalones.forEach(porc => {
@@ -814,7 +815,7 @@ function generarPDFPuroManual() {
 
     // 3. Lógica de validación de políticas
     let quitaCapitalMax = 0;
-    if (mora >= 180) quitaCapitalMax = 0.70;
+    if (mora >= 180) quitaCapitalMax = 0.50;
     else if (mora >= 150) quitaCapitalMax = 0.40;
     else if (mora >= 120) quitaCapitalMax = 0.30;
     else if (mora >= 90) quitaCapitalMax = 0.20;
