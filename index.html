@@ -35,6 +35,15 @@
 <main>
     <div class="container">
 
+        <!-- Nombre del operador: va fuera de las dos solapas porque el mensaje de WhatsApp lo
+             usa desde cualquiera. Se guarda en el navegador, así se escribe una sola vez. -->
+        <div class="fila-operador">
+            <label for="inputOperador">👤 Operador</label>
+            <input type="text" id="inputOperador" placeholder="Tu nombre" maxlength="40"
+                   autocomplete="off"
+                   oninput="localStorage.setItem('co_re_operador', this.value)">
+        </div>
+
         <section id="inicio" class="pagina-activa card">
             <div class="welcome-header">
                 <h1>Bienvenido a CO-RE Dashboard</h1>
@@ -106,10 +115,51 @@
                     </div>
                     <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Mínimo 90 días de mora para ofrecer cuotas.</p>
                 </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="capitalCuotaInput">Saldo Capital (CRM)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="capitalCuotaInput" placeholder="0.000,00" style="padding-left: 45px;">
+                    </div>
+                </div>
                 <div>
                     <label for="fechaVencInput">Fecha de vencimiento de la oferta (opcional)</label>
                     <input type="date" id="fechaVencInput" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
                     <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
+                </div>
+
+                <!-- Espejo de los campos de la solapa Quitas (ver ESPEJOS en js/propuestas.js).
+                     Sin el selector acá, un operador que venía de atender una tarjeta veía
+                     "La tarjeta no admite plan de cuotas" y la grilla vacía, sin ningún control
+                     en esta pantalla para cambiar el tipo: la calculadora quedaba muerta. Y sin
+                     las cantidades, los productos quedaban en 0 y el mensaje y el PDF salían
+                     sin la línea "Productos en gestión". -->
+                <div style="display: flex; gap: 15px; margin-top: 15px; margin-bottom: 15px;">
+                    <div style="flex: 1;">
+                        <label for="cantPrestamosCuotas">Cantidad de préstamos</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">🏦</span>
+                            <input type="number" id="cantPrestamosCuotas" min="0" value="0" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="cantCuotificacionesCuotas">Cantidad de cuotificaciones</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">📄</span>
+                            <input type="number" id="cantCuotificacionesCuotas" min="0" value="0" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label for="tipoProductoCuotas">Tipo de producto</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">💼</span>
+                        <select id="tipoProductoCuotas" onchange="cambiarTipoProducto()" style="padding: 12px 14px 12px 45px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; color:white; width:100%; box-sizing:border-box; appearance:none;">
+                            <option value="prestamo">Préstamo / Cuotificación</option>
+                            <option value="tarjeta">Tarjeta de crédito</option>
+                        </select>
+                    </div>
                 </div>
                 <button onclick="calcularCuotas()" class="btn-main">Generar Planes</button>
             </div>
@@ -118,16 +168,20 @@
             </div>
             <div class="table-responsive">
                 <table id="tablaCuotas">
-                    <thead>
-                        <tr>
-                            <th>Políticas</th>
-                            <th>Cuota Sugerida</th>
-                            <th>Copiar</th>
-                            <th>PDF</th>
-                        </tr>
-                    </thead>
+                    <thead><tr id="tablaCuotasHead"></tr></thead>
                     <tbody></tbody>
                 </table>
+            </div>
+            <!-- Fila de acción del plan elegido. Arranca oculta: sin celda elegida no hay
+                 plan sobre el que copiar, emitir el PDF ni sumar al carrito. La llena
+                 renderAccionPlan() en script.js. -->
+            <div id="accionPlan" class="accion-plan" style="display:none;">
+                <p id="accionPlanTexto" class="accion-plan-texto"></p>
+                <div class="accion-plan-botones">
+                    <button class="copiar-btn" onclick="copiarPlanElegido(this)">💬 Copiar</button>
+                    <button class="copiar-btn" onclick="generarPDFPlanElegido()">📄 PDF</button>
+                    <button class="copiar-btn" onclick="agregarPlanElegido()">➕ Sumar a la propuesta</button>
+                </div>
             </div>
         </section>
 
@@ -176,11 +230,28 @@
                     </div>
                 </div>
 
+                <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                    <div style="flex: 1;">
+                        <label for="cantPrestamos">Cantidad de préstamos</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">🏦</span>
+                            <input type="number" id="cantPrestamos" min="0" value="0" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="cantCuotificaciones">Cantidad de cuotificaciones</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">📄</span>
+                            <input type="number" id="cantCuotificaciones" min="0" value="0" style="padding-left: 45px;">
+                        </div>
+                    </div>
+                </div>
+
                 <div style="margin-bottom: 20px;">
                     <label for="tipoProductoQuita">Tipo de producto</label>
                     <div class="input-wrapper">
                         <span class="currency-symbol">💼</span>
-                        <select id="tipoProductoQuita" onchange="actualizarBotonRefinanciar()" style="padding: 12px 14px 12px 45px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; color:white; width:100%; box-sizing:border-box; appearance:none;">
+                        <select id="tipoProductoQuita" onchange="cambiarTipoProducto()" style="padding: 12px 14px 12px 45px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; color:white; width:100%; box-sizing:border-box; appearance:none;">
                             <option value="prestamo">Préstamo / Cuotificación</option>
                             <option value="tarjeta">Tarjeta de crédito</option>
                         </select>
@@ -206,6 +277,7 @@
                             <th>Monto Final</th>
                             <th>Copiar</th>
                             <th>PDF</th>
+                            <th>Sumar</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -427,9 +499,25 @@
             </div>
         </section>
 
+        <!-- Carrito de propuestas: vive fuera de las solapas y se muestra solo cuando hay opciones cargadas. -->
+        <div id="panelPropuesta" class="panel-propuesta" style="display:none;">
+            <div class="panel-propuesta-head">
+                <span id="propuestaBadge"></span>
+                <button class="btn-limpiar" onclick="Propuestas.limpiar()">✕ Limpiar</button>
+            </div>
+            <div id="propuestaLista"></div>
+            <div class="panel-propuesta-instancia">
+                <label><input type="radio" name="instanciaGestion" value="primer" checked> Primer contacto</label>
+                <label><input type="radio" name="instanciaGestion" value="previa"> Ya hubo gestión previa</label>
+            </div>
+            <button class="btn-main" onclick="Propuestas.copiarMensaje()">💬 ARMAR PROPUESTA</button>
+        </div>
+
     </div>
 </main>
 
 <script src="js/script.js"></script>
+<script src="js/propuesta-core.js"></script>
+<script src="js/propuestas.js"></script>
 </body>
 </html>

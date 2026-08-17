@@ -260,3 +260,89 @@ table th {
     padding: 12px;
     border-radius: 4px;
 }
+
+/* ─── Nombre del operador (arriba de todo, común a las dos solapas) ─── */
+.fila-operador {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.fila-operador label {
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+/* El padding-left de 35px es para los inputs con símbolo de moneda; acá no hay ninguno. */
+.fila-operador input[type="text"] {
+    padding: 8px 12px;
+    font-size: 0.95rem;
+    max-width: 240px;
+}
+
+/* ─── Panel de propuesta en armado ─── */
+.panel-propuesta {
+    position: sticky;
+    bottom: 0;
+    margin-top: 24px;
+    padding: 16px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    /* Queda por debajo del header (z-index 100) mientras flota sobre las tablas. */
+    z-index: 50;
+    box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
+}
+.panel-propuesta-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+#propuestaBadge { font-weight: bold; color: #38bdf8; }
+/* Con el carrito lleno (hasta 6 opciones) la lista scrollea sola: el botón de
+   armar propuesta y el selector de instancia nunca se van de la pantalla. */
+#propuestaLista { max-height: 40vh; overflow-y: auto; }
+.btn-limpiar {
+    background: none;
+    border: 1px solid #475569;
+    color: #94a3b8;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+}
+.propuesta-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    background: #0f172a;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+.propuesta-item .item-deuda { color: #94a3b8; font-size: 0.78rem; }
+.panel-propuesta-instancia {
+    display: flex;
+    flex-wrap: wrap;          /* en celular las dos opciones se apilan en vez de desbordar */
+    gap: 18px;
+    margin: 14px 0;
+    font-size: 0.88rem;
+    color: #cbd5e1;
+}
+.panel-propuesta .btn-main { width: 100%; }
+.esc-td-bloqueada { color: #475569; text-align: center; }
+.esc-td-ok { cursor: pointer; }
+.esc-td-elegida { background: rgba(34, 197, 94, 0.18); font-weight: bold; }
+
+/* Fila de acción de la solapa Cuotas: aparece recién cuando hay un plan elegido en la grilla. */
+.accion-plan {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: #0f172a;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.accion-plan-texto { margin: 0 0 10px 0; color: #cbd5e1; font-size: 0.92rem; }
+/* En celular los tres botones se apilan en vez de desbordar la tarjeta. */
+.accion-plan-botones { display: flex; flex-wrap: wrap; gap: 10px; }

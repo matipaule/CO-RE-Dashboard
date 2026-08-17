@@ -63,9 +63,88 @@ function obtenerMaxCuotas(saldo) {
     return 36;
 }
 
+/**
+ * Borra la grilla y deja un aviso escrito en la tabla.
+ *
+ * POLÍTICA DE `calcularCuotas`: si no va a dibujar una grilla válida, no puede quedar NINGUNA
+ * grilla en pantalla. Todos sus cortes tempranos pasan por acá; no es un caso especial de tarjeta.
+ *
+ * No es cosmético. Un alert se cierra y no deja rastro, pero las celdas de la grilla anterior
+ * siguen dibujadas y siguen siendo clickeables, llamando a `Propuestas.agregar` con los montos y
+ * los topes del cálculo viejo. El caso peor es la mora: si el operador recalcula bajando la mora
+ * de 200 a 50 días ve el aviso de los 90 días, pero la grilla que quedó se armó con el tope de
+ * 200 y le permite sumar al carrito una combinación de quita y cuotas que la mora actualmente
+ * cargada ya no autoriza — justo lo que `quitaMaxima` existe para impedir.
+ *
+ * Los guards de `propuestas.js` no lo tapan: `datosQueCambiaron` compara contra la primera opción
+ * de la misma deuda, así que con el carrito vacío no hay contra qué comparar, devuelve null y el
+ * alta pasa sin control — guardando una foto con el capital y la mora nuevos pero con el
+ * `montoTotal` calculado sobre los viejos.
+ */
+function vaciarGrillaCuotas(mensaje) {
+    // Por el mismo motivo que se borra la grilla: la fila de acción trabaja sobre el plan
+    // elegido, que se calculó con la mora y el capital viejos. Dejarla en pantalla sería
+    // dejar los tres botones —copiar, PDF y sumar al carrito— colgados de esos números.
+    limpiarPlanElegido();
+
+    const encabezado = document.getElementById("tablaCuotasHead");
+    if (encabezado) encabezado.innerHTML = "";
+
+    const base = document.getElementById("saldoRedondeado");
+    if (base) base.innerHTML = "";
+
+    const cuerpo = document.querySelector("#tablaCuotas tbody");
+    if (cuerpo) {
+        cuerpo.innerHTML = `<tr><td style="text-align:center; padding:20px;">${mensaje}</td></tr>`;
+    }
+}
+
+const AVISO_TARJETA_SIN_CUOTAS =
+    "La tarjeta de crédito no admite plan de cuotas. Ofrecé pago único con quita desde la solapa Quitas.";
+
+/**
+ * Celda de una combinación que no está autorizada, sea por tope de quita o por cuota mínima.
+ * Se dibuja como "—" y no se oculta: el operador tiene que ver que la opción existe pero que
+ * no la puede ofrecer.
+ */
+function celdaBloqueada() {
+    const td = document.createElement("td");
+    td.className = "esc-td-bloqueada";
+    td.textContent = "—";
+    return td;
+}
+
 function calcularCuotas() {
+    // La grilla se rehace entera en cada cálculo, así que la elección anterior apuntaría a
+    // una celda que ya no existe. Los cortes tempranos la limpian por vaciarGrillaCuotas;
+    // esto cubre el recálculo que SÍ termina dibujando una grilla nueva.
+    limpiarPlanElegido();
+
+    /*
+     * La tarjeta se corta ANTES que la validación de mora, y no después como el resto de los
+     * chequeos: la tarjeta no admite cuotas con mora ni sin ella. Cortando por mora primero, una
+     * tarjeta con menos de 90 días se iba por el aviso de "esperá a los 90 días" —que además
+     * sugiere que después sí va a poder cuotificarse, y nunca va a poder— sin limpiar la grilla,
+     * dejando en pantalla las celdas clickeables del préstamo anterior.
+     */
+    const tipoActual = document.getElementById("tipoProductoQuita")?.value || "prestamo";
+    if (tipoActual === "tarjeta") {
+        vaciarGrillaCuotas(AVISO_TARJETA_SIN_CUOTAS);
+        alert(AVISO_TARJETA_SIN_CUOTAS);
+        return;
+    }
+
+    /*
+     * Saldo vacío: se limpia la grilla pero NO se alerta, y es a propósito. `calcularCuotas`
+     * también corre con Enter desde cualquier campo de la solapa (ver el listener de arriba), así
+     * que alertar acá le tiraría un popup al operador cada vez que apreta Enter con la pantalla
+     * todavía en blanco. El mensaje en la tabla alcanza y es el estado vacío natural.
+     */
     const inputVal = document.getElementById("saldoInput").value;
-    if (!inputVal) return;
+    if (!inputVal) {
+        vaciarGrillaCuotas("Cargá el Saldo CRM para generar los planes en cuotas.");
+        return;
+    }
 
     let corregido = inputVal;
     if(inputVal.includes('.') && !inputVal.includes(',')) {
@@ -76,6 +155,7 @@ function calcularCuotas() {
     const saldo = parseFloat(limpio);
 
     if (isNaN(saldo) || saldo <= 0) {
+        vaciarGrillaCuotas("El Saldo CRM cargado no es un monto válido.");
         alert("Ingrese un monto válido.");
         return;
     }
@@ -86,6 +166,9 @@ function calcularCuotas() {
         const msg = diasMoraCuotas > 0
             ? `⚠️ Este caso tiene ${diasMoraCuotas} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.\n\nEsperá hasta cumplir los 90 días para evitar reformulaciones por intereses generados.`
             : `⚠️ Ingresá los días de mora antes de calcular cuotas.\n\nLas cuotas solo se pueden ofrecer a partir de los 90 días de mora.`;
+        vaciarGrillaCuotas(diasMoraCuotas > 0
+            ? `Este caso tiene ${diasMoraCuotas} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días.`
+            : "Ingresá los días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.");
         alert(msg);
         return;
     }
@@ -93,57 +176,236 @@ function calcularCuotas() {
     const redondeado = Math.ceil(saldo);
     document.getElementById("saldoRedondeado").innerHTML = `Base: <strong>$${redondeado.toLocaleString("es-AR")}</strong>`;
 
-    const tablaBody = document.querySelector("#tablaCuotas tbody");
-    tablaBody.innerHTML = "";
+    // La quita se calcula SIEMPRE sobre el capital, nunca sobre el total con intereses.
+    const capitalCuotas = parseFloat(
+        (document.getElementById("capitalCuotaInput")?.value || "0").replace(/\./g, "").replace(",", ".")
+    ) || 0;
 
-    const max = obtenerMaxCuotas(redondeado);
-    let hayPlanes = false;
-
-    for (let i = 2; i <= max; i++) {
-        const valor = Math.ceil(redondeado / i);
-        
-        if (valor < 50000) continue; 
-
-        hayPlanes = true;
-        const fila = document.createElement("tr");
-
-        fila.innerHTML = `
-            <td>Plan ${i} cuotas</td>
-            <td class="monto-cuota"><strong>$${valor.toLocaleString("es-AR")}</strong></td>
-            <td><button class="copiar-btn" onclick="copiarPlan(${i}, ${valor}, this)">Copiar</button></td>
-            <td><button class="copiar-btn" style="background:rgba(56,189,248,0.15);" onclick="generarPDFCuotas(${i}, ${valor})">📄 PDF</button></td>
-        `;
-        tablaBody.appendChild(fila);
+    if (capitalCuotas <= 0) {
+        vaciarGrillaCuotas("Cargá el Saldo Capital para calcular las quitas sobre los planes.");
+        alert("Cargá el Saldo Capital para calcular las quitas sobre los planes.");
+        return;
     }
 
-    if (!hayPlanes) {
-        tablaBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding:20px;">Saldo insuficiente para financiar (Cuotas < $50.000). Se sugiere Pago Único.</td></tr>`;
+    // Base de ESTE cálculo: viaja en el plan elegido hasta el ➕ y ahí se compara contra la
+    // pantalla. Ver `baseDelCalculo` y el guard de `Propuestas.agregar`.
+    const base = baseDelCalculo();
+
+    const NIVELES = [0, 10, 20, 30, 40, 50];
+    const max = obtenerMaxCuotas(redondeado);
+    // Arranca en 2: el pago único ya lo cubre la solapa Quitas y no se duplica acá.
+    const columnas = [2, 3, 6, 12].filter(c => c <= max);
+
+    document.getElementById("tablaCuotasHead").innerHTML =
+        "<th>Quita</th>" + columnas.map(c => `<th>${c} cuotas</th>`).join("");
+
+    const tablaBody = document.querySelector("#tablaCuotas tbody");
+    tablaBody.innerHTML = "";
+    let hayAlguna = false;
+
+    NIVELES.forEach(porc => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `<td><strong>${porc === 0 ? "Solo intereses" : porc + "%"}</strong></td>`;
+
+        columnas.forEach(c => {
+            const tope = PropuestaCore.quitaMaxima(diasMoraCuotas, c);
+
+            if (tope === null || porc > tope) {
+                fila.appendChild(celdaBloqueada());
+                return;
+            }
+
+            const total = Math.ceil(capitalCuotas * (1 - porc / 100));
+            const valor = Math.ceil(total / c);
+
+            if (valor < 50000) {   // cuota mínima, ya vigente
+                fila.appendChild(celdaBloqueada());
+                return;
+            }
+
+            hayAlguna = true;
+            const td = document.createElement("td");
+            td.className = "esc-td-ok";
+            td.innerHTML = `$${valor.toLocaleString("es-AR")}`;
+            td.title = `${c} cuotas · ${porc}% de quita · total $${total.toLocaleString("es-AR")}`;
+            // El click ELIGE el plan; sumarlo al carrito pasó a ser un botón de la fila de
+            // acción. Es el precio de tener las tres acciones (copiar, PDF y sumar) sobre
+            // el mismo plan: si el click siguiera agregando, no habría dónde pararse para
+            // copiar o emitir el PDF de una combinación sin antes meterla en la propuesta.
+            td.onclick = () => elegirPlan(porc, c, total, valor, td, base);
+            fila.appendChild(td);
+        });
+
+        tablaBody.appendChild(fila);
+    });
+
+    if (!hayAlguna) {
+        tablaBody.innerHTML = `<tr><td colspan="${columnas.length + 1}" style="text-align:center; padding:20px;">No hay planes en cuotas disponibles para este saldo y esta mora.</td></tr>`;
     }
 }
 
-function copiarPlan(c, v, btn) {
-    const totalFinanciado = c * v;
-    const nombre = (document.getElementById("nombreCuotaInput")?.value || "").trim();
-    const saludo = nombre ? `Hola ${nombre}, ` : "Hola, ";
+/**
+ * Plan que el operador eligió en la grilla, o null si todavía no eligió ninguno.
+ *
+ * Es la única fuente de la fila de acción: Copiar, PDF y Sumar a la propuesta trabajan
+ * sobre ESTE plan y no sobre lo que se pueda leer de la grilla, que se rehace entera en
+ * cada cálculo. `porc` es la quita sobre CAPITAL (interna, la que manda en los topes);
+ * `total` es lo que efectivamente va a pagar el deudor.
+ *
+ * `base` es la foto de los datos con los que se armó la grilla; la usa el ➕ para no dejar
+ * sumar un plan calculado contra otra pantalla (ver `baseDelCalculo`).
+ */
+let planElegido = null;
 
+/** Marca la celda, guarda el plan y llena la fila de acción. La marca anterior se borra. */
+function elegirPlan(porc, cuotas, total, valor, celda, base) {
+    planElegido = { porc: porc, cuotas: cuotas, total: total, valor: valor, base: base };
+
+    document.querySelectorAll("#tablaCuotas .esc-td-elegida")
+        .forEach(td => td.classList.remove("esc-td-elegida"));
+    if (celda) celda.classList.add("esc-td-elegida");
+
+    renderAccionPlan();
+}
+
+/** Suelta el plan elegido y esconde la fila de acción. */
+function limpiarPlanElegido() {
+    planElegido = null;
+    document.querySelectorAll("#tablaCuotas .esc-td-elegida")
+        .forEach(td => td.classList.remove("esc-td-elegida"));
+    renderAccionPlan();
+}
+
+/**
+ * Dibuja el resumen del plan elegido. El porcentaje que se muestra acá es el de la grilla
+ * —sobre capital— porque esta línea la lee el operador, no el deudor: es la que le confirma
+ * que apretó la celda que quería. Al deudor, en cambio, el mensaje y el PDF le hablan
+ * siempre del porcentaje sobre el saldo total.
+ */
+function renderAccionPlan() {
+    const fila = document.getElementById("accionPlan");
+    if (!fila) return;
+
+    if (!planElegido) { fila.style.display = "none"; return; }
+
+    const p = planElegido;
+    const quita = p.porc === 0 ? "solo intereses" : `${p.porc}% de quita`;
+    const texto = document.getElementById("accionPlanTexto");
+    if (texto) {
+        texto.innerHTML = `Plan elegido: <strong>${p.cuotas} cuotas</strong> con ${quita} — ` +
+            `${p.cuotas} × $${p.valor.toLocaleString("es-AR")} ` +
+            `(total $${p.total.toLocaleString("es-AR")})`;
+    }
+    fila.style.display = "block";
+}
+
+function copiarPlanElegido(btn) {
+    if (!planElegido) return;
+    copiarPlan(planElegido.cuotas, planElegido.valor, btn, planElegido.total);
+}
+
+function generarPDFPlanElegido() {
+    if (!planElegido) return;
+    // Sin `datos` el PDF lee la ficha de la solapa, que es justo la que el operador tiene
+    // a la vista: este plan es suelto y no pasó por el carrito.
+    generarPDFCuotas(planElegido.cuotas, planElegido.valor);
+}
+
+function agregarPlanElegido() {
+    if (!planElegido) return;
+    Propuestas.agregar(planElegido.porc, planElegido.cuotas, planElegido.total, planElegido.base);
+}
+
+/**
+ * El nombre con el que se presenta el operador, para los mensajes de estas dos solapas.
+ *
+ * Se lee del input de arriba de todo, que es el valor vivo, y se cae a `co_re_operador`
+ * en localStorage —la clave donde ese mismo input se persiste— por si el campo todavía
+ * no se restauró. Si no hay ninguno de los dos devuelve "", y `PropuestaCore.presentacion`
+ * se encarga de cambiar la redacción en vez de dejar un hueco en el saludo.
+ */
+function nombreOperador() {
+    const delInput = ((document.getElementById("inputOperador") || {}).value || "").trim();
+    if (delInput) return delInput;
+    try {
+        return (localStorage.getItem("co_re_operador") || "").trim();
+    } catch (e) {
+        return "";  // storage bloqueado: se manda la redacción sin nombre
+    }
+}
+
+/**
+ * Mensaje de WhatsApp de UN plan suelto (el elegido en la grilla), sin pasar por el carrito.
+ *
+ * `montoTotal` es el total del plan tal como lo calculó la grilla; sin él se cae en `c * v`,
+ * que es lo que esta función hacía sola cuando las cuotas no llevaban quita.
+ *
+ * Ese es el arreglo que trae esta tarea. El texto viejo —"cuotificación SIN INTERÉS sobre su
+ * deuda total"— se escribió cuando ningún plan en cuotas perdonaba capital: decía la verdad
+ * porque lo financiado ERA la deuda entera. Con la grilla de quita × cuotas un plan puede
+ * condonar parte del capital, y ahí la misma frase le estaría diciendo al deudor que no se le
+ * perdona nada mientras se le perdona. Por eso el criterio para partir el mensaje es si queda
+ * quita SOBRE EL SALDO TOTAL, que es exactamente la afirmación que se vuelve falsa —y no si
+ * `porc` es 0—: una fila de "solo intereses" no toca el capital pero igual financia menos que
+ * la deuda informada, así que también tiene que decirlo.
+ *
+ * El porcentaje que se comunica es siempre el del saldo total, nunca el de capital: ese es
+ * interno y solo manda en los topes y en la dominancia. Mismo criterio que copiarChatQuita y
+ * que el mensaje del carrito (PropuestaCore.lineaOpcion).
+ */
+function copiarPlan(c, v, btn, montoTotal) {
+    const totalFinanciado = montoTotal || c * v;
+    const nombre = (document.getElementById("nombreCuotaInput")?.value || "").trim();
+
+    const saldoTotal = parseFloat(
+        (document.getElementById("saldoInput")?.value || "0").replace(/\./g, "").replace(",", ".")
+    ) || 0;
+
+    // Mismo cálculo que usa el carrito para `quitaSobreTotal` (propuestas.js).
+    const quitaSobreTotal = saldoTotal > 0
+        ? Math.floor(((saldoTotal - totalFinanciado) / saldoTotal) * 100)
+        : 0;
+    const conQuita = quitaSobreTotal > 0;
+
+    const diasMora = parseInt(document.getElementById("moraInputCuotas")?.value) || 0;
     const fechaVenc = obtenerFechaVenc("fechaVencInput");
 
-    const txt = `${saludo}logré gestionarle un beneficio de cuotificación SIN INTERÉS sobre su deuda total (saldo vencido + cuotas a vencer).
+    const productos = PropuestaCore.formatearProductos({
+        prestamos: parseInt(document.getElementById("cantPrestamos")?.value, 10) || 0,
+        cuotificaciones: parseInt(document.getElementById("cantCuotificaciones")?.value, 10) || 0,
+    });
+
+    // Un plan en cuotas es siempre de préstamos: la tarjeta no admite cuotificación.
+    const datosPago = PropuestaCore.textoCuenta("prestamo", conQuita);
+
+    // Mismo saludo que el mensaje del carrito, incluido el caso del operador sin cargar.
+    const saludo = PropuestaCore.presentacion(nombre, nombreOperador());
+
+    const encabezado = conQuita
+        ? `${saludo} Logré gestionarte un beneficio del ${quitaSobreTotal}% de quita sobre el saldo total adeudado, para que puedas regularizar tu situación en cuotas SIN INTERÉS.`
+        : `${saludo} Logré gestionarte un beneficio de cuotificación SIN INTERÉS sobre tu deuda total (saldo vencido + cuotas a vencer).`;
+
+    const detalle = [
+        productos ? `• Productos en gestión: ${productos}` : null,
+        conQuita ? `• Saldo total adeudado (con intereses): $${saldoTotal.toLocaleString("es-AR")}` : null,
+        conQuita && diasMora > 0 ? `• Días de mora: ${diasMora}` : null,
+        conQuita ? `• Quita aplicada: ${quitaSobreTotal}% sobre el saldo total` : null,
+        `• Monto total a financiar: $${totalFinanciado.toLocaleString("es-AR")}`,
+        `• Plan: ${c} cuotas fijas de $${v.toLocaleString("es-AR")} (sin interés)`,
+    ].filter(Boolean).join("\n");
+
+    const txt = `${encabezado}
 
 📋 Detalle de la propuesta:
-• Monto total a financiar: $${totalFinanciado.toLocaleString("es-AR")}
-• Plan: ${c} cuotas fijas de $${v.toLocaleString("es-AR")} (sin interés)
+${detalle}
 
-⏰ Tiene tiempo de confirmar y abonar hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
-⚠️ Este beneficio incluye exclusivamente préstamos y cuotificaciones.(tarjeta de credito, en caso de poseer, esta excluido)
+⏰ Tenés tiempo de confirmar y abonar la primera cuota hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
+⚠️ Este beneficio aplica exclusivamente a préstamos y cuotificaciones; la tarjeta de crédito, en caso de poseerla, queda excluida.
 
 💳 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
-CBU: 3840200500000045539941
-Alias: UALABANK.PMO
-Razón Social: UALÁ BANK S.A.U.
-CUIT: 30-71565463-2
+${datosPago}
 
-Importante: avisame antes de pagar y enviame el comprobante por esta vía.
+Importante: avisame antes de pagar y mandame el comprobante por esta vía.
 Quedo a disposición.`;
 
     navigator.clipboard.writeText(txt).then(() => {
@@ -200,10 +462,18 @@ function piePDF(doc, nroAcuerdo) {
     doc.text("CO-RE | Collection. Recovery | " + nroAcuerdo + " | Documento generado digitalmente", W / 2, 289, { align: "center" });
 }
 
-function bloqueCliente(doc, nombre, dni, y) {
+/** Texto de productos para el PDF. La tarjeta de Ualá es siempre Mastercard. */
+function textoProductosPDF(tipo, productos) {
+    if (tipo === "tarjeta") return "1 Tarjeta de Crédito Mastercard";
+    return PropuestaCore.formatearProductos(productos || {});
+}
+
+/** `productos` es el texto ya formateado, opcional. Si viene, el recuadro crece 6 mm. */
+function bloqueCliente(doc, nombre, dni, y, productos) {
     const W = 210, M = 20;
+    const alto = productos ? 32 : 26;
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 26, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, alto, 3, 3, "F");
     doc.setTextColor(220, 38, 38);
     doc.setFontSize(8);
     doc.setFont("helvetica", "bold");
@@ -221,18 +491,32 @@ function bloqueCliente(doc, nombre, dni, y) {
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.text(dni, M + 52, y + 23);
-    return y + 33;
+
+    if (productos) {
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(180, 195, 210);
+        doc.text("Productos:", M + 6, y + 29);
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.text(productos, M + 52, y + 29);
+    }
+
+    return y + alto + 7;   // sin productos da y+33, igual que antes
 }
 
 /** Devuelve los datos bancarios correctos según el tipo de producto y si hay quita.
  *  - Préstamo (con o sin quita)        → UALABANK.PMO (UALÁ BANK S.A.U. / WILOBANK SAU)
- *  - Tarjeta + CON quita                → ACUERDO.UALABANK.TDC (ALAU TECNOLOGÍA S.A.U.)
- *  - Tarjeta + SIN quita (pago total)   → WILOBANK S.A.U.
+ *  - Tarjeta + CON quita                → ACUERDO.UALABANK.TDC (UALÁ BANK S.A.U.)
+ *  - Tarjeta + SIN quita (pago total)   → CBU sin alias (UALÁ BANK S.A.U.)
+ *
+ *  El comentario decía "ALAU TECNOLOGÍA S.A.U." para la tarjeta con quita mientras el código
+ *  devuelve UALÁ BANK. En una función de datos bancarios esa discrepancia es una trampa:
+ *  manda el código, y el comentario ahora dice lo mismo.
  */
 function obtenerDatosCuenta(tipo, conQuita) {
     if (tipo === "tarjeta" && !conQuita) {
         return {
-            razonSocial: "UALA BANK S.A.U.",
+            razonSocial: "UALÁ BANK S.A.U.",
             cuit: "30-71565463-2",
             cbu: "3840100200000000619567",
             alias: null,
@@ -241,7 +525,9 @@ function obtenerDatosCuenta(tipo, conQuita) {
     }
     if (tipo === "tarjeta") {
         return {
-            razonSocial: "UALA BANK S.A.U.",
+            // Con tilde, igual que la rama de préstamo de acá abajo y que RAZON_SOCIAL en
+            // propuesta-core.js: es la forma que ya circula en producción.
+            razonSocial: "UALÁ BANK S.A.U.",
             cuit: "30-71565463-2",
             cbu: "3840200500000049624900",
             alias: "ACUERDO.UALABANK.TDC",
@@ -329,10 +615,23 @@ function bloqueTerminos(doc, clausulas, y) {
     return y + altura + 6;
 }
 
+/**
+ * Bloque de firmas. La usan los tres PDF, así que lo que se toque acá los toca a los tres.
+ *
+ * El primer texto que se pinta es el nombre, en `lineaY - 12`: con `lineaY = y + 25` el
+ * bloque arrastraba 13 mm en los que no dibujaba nada, y en cambio terminaba en `y + 30`.
+ * Con el bloque arrancando en 263 —que es donde lo dejan los tres documentos— la línea de
+ * firma caía en 288 y "Firma y Sello CO-RE" en 293, los dos adentro de la banda opaca del
+ * pie (`piePDF` pinta de 282 a 297 y se dibuja DESPUÉS de este bloque): quedaban tapados.
+ *
+ * Con `lineaY = y + 12` el contenido pasa a ocupar de `y` a `y + 17` —el mismo alto de
+ * antes, sin el aire muerto de arriba—, la aclaración cae en 280 y todo queda arriba de
+ * la banda. No hubo que mover ningún otro bloque.
+ */
 function bloqueFiremas(doc, y) {
     const W = 210, M = 20;
-    const lineaY = y + 25; // Bajamos la línea para que no pise el texto
-    
+    const lineaY = y + 12;
+
     doc.setDrawColor(51, 65, 85);
     doc.setLineWidth(0.3);
 
@@ -364,10 +663,11 @@ function bloqueFiremas(doc, y) {
     doc.text("Firma y Sello CO-RE", inicioDerecha, lineaY + 5);
 }
 
-function generarPDFQuita(montoFinal, porcReal, tipoParam) {
-    const nombre = document.getElementById("nombreInput")?.value || "";
-    const dni = document.getElementById("dniInput")?.value || "";
-    
+/** `datos` es opcional: es una foto del carrito. Sin él lee del DOM, igual que siempre. */
+function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
+    const nombre = datos ? datos.nombre : (document.getElementById("nombreInput")?.value || "");
+    const dni    = datos ? datos.dni    : (document.getElementById("dniInput")?.value || "");
+
     if (!nombre || !dni) {
         alert("Para generar el PDF completá el Nombre y DNI del titular.");
         return;
@@ -398,17 +698,27 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam) {
     doc.text("N° " + nroAcuerdo, W - M, 30, { align: "right" });
 
     let y = 44;
-    y = bloqueCliente(doc, nombre, dni, y);
+    const productos = datos ? datos.productos : {
+        prestamos: parseInt(document.getElementById("cantPrestamos")?.value, 10) || 0,
+        cuotificaciones: parseInt(document.getElementById("cantCuotificaciones")?.value, 10) || 0,
+    };
+    y = bloqueCliente(doc, nombre, dni, y, textoProductosPDF(tipo, productos));
 
-    // Captura de datos de los inputs
-    const totalConInteres = parseFloat((document.getElementById("totalConInteresInput")?.value || "0").replace(/\./g, "").replace(",", ".")) || 0;
-    const diasMora = parseInt(document.getElementById("moraInput")?.value) || 0;
+    // Captura de datos: de `datos` si vino, si no de los inputs
+    const totalConInteres = datos
+        ? datos.totalConInteres
+        : parseFloat((document.getElementById("totalConInteresInput")?.value || "0").replace(/\./g, "").replace(",", ".")) || 0;
+    const diasMora = datos ? datos.diasMora : (parseInt(document.getElementById("moraInput")?.value) || 0);
     const ahorroReal = totalConInteres - montoFinal;
-    const fechaVenc = obtenerFechaVenc("fechaVencInputQuita");
+    const fechaVenc = datos ? datos.fechaVenc : obtenerFechaVenc("fechaVencInputQuita");
 
-    // Recuadro de condiciones
+    // Recuadro de condiciones.
+    // Alto 52: el último ítem apoya en y+47 (y+17 + 5*6) y quedan 5 mm de aire abajo.
+    // Antes eran 64 con 17 mm de aire muerto; los 15 mm recuperados (12 de recuadro y 3
+    // de separación) son los que suman la línea de productos (6) y la cláusula 7 (9),
+    // así el bloque de firmas queda en la misma y de siempre y no se cae de la hoja.
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 64, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, 52, 3, 3, "F");
     
     doc.setTextColor(220, 38, 38);
     doc.setFontSize(8);
@@ -449,7 +759,7 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam) {
         doc.setFont("helvetica", "normal");
     });
 
-    y += 71;
+    y += 56;   // 52 del recuadro + 4 de separación
 
     // Bloque de pago — toda la solapa Quitas usa la cuenta CON quita.
     // La cuenta SIN quita solo aplica desde el PDF Manual.
@@ -465,9 +775,10 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam) {
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
         clausula4,
         "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
+        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar",
+        "7. El incumplimiento del pago acordado deja sin efecto el beneficio otorgado y habilita la derivación del caso a instancias de gestión de mayor severidad."
     ];
-    
+
     y = bloqueTerminos(doc, clausulas, y);
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
@@ -508,6 +819,13 @@ function generarEscalaQuitas() {
     const tablaBody = document.querySelector("#tablaQuitas tbody");
     tablaBody.innerHTML = "";
 
+    // Base de ESTE cálculo, congelada acá y viajando en el ➕ de cada fila: `Propuestas.agregar`
+    // la compara contra la pantalla del momento del click. Sin esto, el ➕ tomaba el monto del
+    // cálculo viejo y el capital, el saldo, la mora y el tipo del DOM en vivo — y con la mora
+    // corregida a 50 sin recalcular, el mensaje salía diciendo "Días de mora: 50" y "66% de
+    // quita", cuando abajo de 60 días no hay ninguna quita autorizada.
+    const baseAttr = baseParaAtributo(baseDelCalculo());
+
     const escalones = [0, 10, 20, 30, 40, 50];
     let opcionesMostradas = 0;
 
@@ -530,15 +848,16 @@ function generarEscalaQuitas() {
                 <td><strong>$${montoFinal.toLocaleString("es-AR")}</strong></td>
                 <td><button class="copiar-btn" onclick="copiarChatQuita(${montoFinal}, ${porcRealTotal}, this)">Copiar</button></td>
                 <td><button class="copiar-btn" style="background:rgba(56,189,248,0.15);" onclick="generarPDFQuita(${montoFinal}, ${porcRealTotal}, '${tipoSeleccionado}')">📄 PDF</button></td>
+                <td><button class="copiar-btn btn-agregar" onclick="Propuestas.agregar(${porc}, 1, ${montoFinal}, ${baseAttr})">➕</button></td>
             `;
             tablaBody.appendChild(fila);
         }
     });
 
     if (sinQuita) {
-        tablaBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;">⛔ Con menos de 60 días de mora no hay quita autorizada. Gestionar pago del total: $${totalConInteres.toLocaleString("es-AR")}</td></tr>`;
+        tablaBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">⛔ Con menos de 60 días de mora no hay quita autorizada. Gestionar pago del total: $${totalConInteres.toLocaleString("es-AR")}</td></tr>`;
     } else if (opcionesMostradas === 0) {
-        tablaBody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;">Solo quita de intereses. Pago único sugerido: $${capital.toLocaleString("es-AR")}</td></tr>`;
+        tablaBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">Solo quita de intereses. Pago único sugerido: $${capital.toLocaleString("es-AR")}</td></tr>`;
     }
 
     document.getElementById("infoEscala").innerHTML = sinQuita
@@ -571,9 +890,75 @@ function actualizarBotonRefinanciar() {
     }
 }
 
+/** Borra la tabla de Quitas y deja un aviso escrito, igual que `vaciarGrillaCuotas`. */
+function vaciarTablaQuitas(mensaje) {
+    const cuerpo = document.querySelector("#tablaQuitas tbody");
+    if (cuerpo) {
+        cuerpo.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">${mensaje}</td></tr>`;
+    }
+    const info = document.getElementById("infoEscala");
+    if (info) info.innerHTML = "";
+}
+
+const AVISO_CAMBIO_TIPO =
+    "Cambiaste el tipo de producto. Volvé a calcular para ver las opciones que corresponden.";
+
+/**
+ * El operador cambió el tipo de producto: las dos tablas quedan sin valor y se vacían.
+ *
+ * Cambiar el selector NO recalculaba nada, así que las tablas dibujadas seguían en pantalla
+ * y seguían siendo clickeables con el tipo VIEJO horneado adentro, mientras el ➕ y el botón
+ * Copiar leen el tipo en vivo. Los dos agujeros que cierra:
+ *
+ *  - Calcular la grilla de Cuotas como préstamo, pasar el selector a tarjeta y volver a
+ *    Cuotas: la grilla del préstamo seguía ahí y sumaba al carrito una TARJETA CON CUOTAS,
+ *    que la política prohíbe. Peor: `generarPDF` la manda a `generarPDFCuotas`, que hornea
+ *    `bloquePago(doc, y, "prestamo", false)`, así que el acuerdo de tarjeta salía con el
+ *    CBU de préstamos.
+ *  - En una fila de Quitas el PDF lleva el tipo horneado en el `onclick` al calcular, y
+ *    Copiar y ➕ lo leen en vivo: los tres botones de la misma fila podían discrepar.
+ */
+function cambiarTipoProducto() {
+    actualizarBotonRefinanciar();
+    vaciarGrillaCuotas(AVISO_CAMBIO_TIPO);
+    vaciarTablaQuitas(AVISO_CAMBIO_TIPO);
+}
+
+/**
+ * Foto de la base con la que se calculó una tabla: capital, saldo total, mora y tipo.
+ *
+ * Se lee con `Propuestas.leerDeuda()` —el MISMO lector que va a usar `Propuestas.agregar`
+ * al comparar— para que la comparación no pueda fallar por una diferencia de parseo entre
+ * las dos solapas, sino solo porque el operador efectivamente cambió un dato.
+ *
+ * El titular y las cantidades de productos quedan afuera a propósito: no entran en el
+ * cálculo del monto y ya tienen sus propios guards en `propuestas.js`.
+ */
+function baseDelCalculo() {
+    const d = Propuestas.leerDeuda();
+    return {
+        capital: d.capital,
+        totalConInteres: d.totalConInteres,
+        diasMora: d.diasMora,
+        tipo: d.tipo,
+    };
+}
+
+/**
+ * La base, lista para meter dentro de un `onclick=""` del HTML.
+ *
+ * Las comillas del JSON se escapan como `&quot;`: el navegador decodifica las entidades del
+ * atributo ANTES de parsear el JS, así que el handler recibe un objeto literal bien formado
+ * sin romper el atributo. Adentro solo hay números y el tipo ("prestamo"/"tarjeta").
+ */
+function baseParaAtributo(base) {
+    return JSON.stringify(base).replace(/"/g, "&quot;");
+}
+
 function copiarChatQuita(monto, porcReal, btn) {
-    const nombre = document.getElementById("nombreInput").value || "Titular";
-    const dni = document.getElementById("dniInput").value || "-";
+    // Sin relleno tipo "Titular" para el nombre vacío: `PropuestaCore.presentacion`
+    // ya redacta el saludo sin él, igual que en el mensaje del carrito.
+    const nombre = (document.getElementById("nombreInput")?.value || "").trim();
 
     // Tomamos los inputs originales para mostrar el detalle completo
     const totalInputVal = document.getElementById("totalConInteresInput")?.value || "0";
@@ -581,10 +966,9 @@ function copiarChatQuita(monto, porcReal, btn) {
     const totalOriginal = parseFloat(totalInputVal.replace(/\./g, "").replace(",", ".")) || 0;
     const saldoCapital = parseFloat(capInputVal.replace(/\./g, "").replace(",", ".")) || 0;
 
-    // % de quita aplicada sobre el capital (lo que el operador realmente descontó)
-    const porcCapital = saldoCapital > 0
-        ? Math.round((1 - monto / saldoCapital) * 100)
-        : 0;
+    // El % sobre CAPITAL no se calcula acá: es el número interno que manda en los topes y
+    // nunca puede salir al deudor. Este mensaje comunica siempre `porcReal`, el % sobre el
+    // saldo total, igual que el PDF y que el mensaje del carrito.
 
     // Tipo de producto: préstamo o tarjeta
     const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
@@ -602,28 +986,27 @@ function copiarChatQuita(monto, porcReal, btn) {
         ? "⚠️ Este beneficio aplica a tu deuda de TARJETA DE CRÉDITO."
         : "⚠️ Este beneficio aplica exclusivamente a PRÉSTAMOS y CUOTIFICACIONES (tarjeta de credito, en caso de poseer, esta excluido).";
 
-    const lineaPorcentajes = saldoCapital > 0
-        ? `• Quita aplicada: ${porcReal}%  sobre el saldo total;`
-        : `• Quita aplicada: ${porcReal}% sobre el saldo total`;
+    // Mismo saludo que el mensaje del carrito, incluido el caso del operador sin cargar.
+    const saludo = PropuestaCore.presentacion(nombre, nombreOperador());
 
-    const mensaje = `Hola ${nombre}, DNI: ${dni}. Logré gestionarle un beneficio del ${porcReal}% de quita sobre el saldo total adeudado, para que pueda regularizar su situación.
+    const mensaje = `${saludo} Logré gestionarte un beneficio del ${porcReal}% de quita sobre el saldo total adeudado, para que puedas regularizar tu situación.
 
 📋 Detalle de la propuesta:
 • Saldo total adeudado (con intereses): $${totalOriginal.toLocaleString("es-AR")}
 • Saldo capital: $${saldoCapital.toLocaleString("es-AR")}
 • Días de mora: ${diasMora}
-${lineaPorcentajes}
+• Quita aplicada: ${porcReal}% sobre el saldo total
 • Monto final a cancelar: $${monto.toLocaleString("es-AR")}
 
-⏰ Tiene tiempo de confirmar y abonar hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
+⏰ Tenés tiempo de confirmar y abonar hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
 
 ${disclaimer}
 
 💳 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
 ${datosPago}
 
-Importante: avisame antes de pagar y enviame el comprobante por esta vía. A las 72 hs hábiles verá el pago reflejado en la app.
-Durante ese período no debe utilizar la cuenta.
+Importante: avisame antes de pagar y mandame el comprobante por esta vía. A las 72 hs hábiles vas a ver el pago reflejado en la app.
+Durante ese período no tenés que utilizar la cuenta.
 
 Quedo a disposición.`;
 
@@ -673,12 +1056,13 @@ function copiarTodoPago() {
     });
 }
 
-function generarPDFCuotas(numCuotas, valorCuota) {
-    const nombre = document.getElementById("nombreCuotaInput")?.value || "CLIENTE";
-    const dni = document.getElementById("dniCuotaInput")?.value || "---";
-    const saldoInput = document.getElementById("saldoInput").value;
-    const limpio = saldoInput.replace(/\./g, "").replace(",", ".");
-    const saldoTotal = parseFloat(limpio) || 0;
+/** `datos` es opcional: es una foto del carrito. Sin él lee del DOM, igual que siempre. */
+function generarPDFCuotas(numCuotas, valorCuota, datos) {
+    const nombre = datos ? datos.nombre : (document.getElementById("nombreCuotaInput")?.value || "CLIENTE");
+    const dni    = datos ? datos.dni    : (document.getElementById("dniCuotaInput")?.value || "---");
+    const saldoTotal = datos
+        ? datos.saldoTotal
+        : (parseFloat((document.getElementById("saldoInput").value || "0").replace(/\./g, "").replace(",", ".")) || 0);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -691,11 +1075,58 @@ function generarPDFCuotas(numCuotas, valorCuota) {
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.text("N° " + nroAcuerdo, 190, 30, { align: "right" });
-    
-    let y = 44;
-    // Bloque Datos del Titular
+
+    // La grilla nueva permite planes CON quita: lo que el deudor termina pagando es la suma
+    // de las cuotas y puede ser menor al saldo total. Sin decirlo, el documento muestra un
+    // saldo y un valor de cuota que no cierran entre sí. El saldo sale de la foto del carrito
+    // (`datos`) si vino, y de `saldoInput` si el plan es suelto; el total a abonar, siempre de
+    // los parámetros del plan. Sin quita el acuerdo sale exactamente igual que siempre.
+    const totalAAbonar = numCuotas * valorCuota;
+    // Porcentaje sobre el SALDO TOTAL, el único que ve el deudor (el de capital es interno).
+    // Se calcula contra `totalAAbonar` —la misma suma de cuotas que figura en el recuadro—
+    // para que las tres cifras cierren entre sí.
+    const porcQuita = saldoTotal > 0
+        ? Math.floor(((saldoTotal - totalAAbonar) / saldoTotal) * 100)
+        : 0;
+    // Se decide por el PORCENTAJE ya redondeado, no por la diferencia de montos: es el mismo
+    // criterio que usa `copiarPlan` para el WhatsApp (`quitaSobreTotal > 0`). Si el redondeo
+    // de `valorCuota` deja una diferencia tan chica que el `Math.floor` da 0, informar por la
+    // diferencia haría que este acuerdo —que se firma— dijera "Quita aplicada: 0% sobre el
+    // saldo total" mientras el mensaje del mismo plan no menciona ninguna quita. Las dos
+    // piezas tienen que decir lo mismo. Se resuelve acá, antes de la geometría, porque este
+    // mismo booleano gobierna el alto del recuadro y las compensaciones de milímetros: si el
+    // alto y los ítems se decidieran por criterios distintos, el recuadro no cerraría.
+    // El criterio es SOLO el porcentaje, sin exigir `datos`: `generarPDFPlanElegido` emite el
+    // PDF de un plan de la grilla sin foto del carrito, y con el `!!datos` ese documento
+    // apagaba el bloque de quita entero. Salía con "Saldo Total: $1.500.000" contra 3 cuotas
+    // de $350.000 y sin mencionar ninguna quita, mientras el botón Copiar de al lado decía
+    // "Quita aplicada: 30% sobre el saldo total": el acuerdo firmado no registraba el
+    // beneficio y sus propias cifras no cerraban. Sin `datos`, `saldoTotal` sale de
+    // `saldoInput` —espejado con `totalConInteresInput`—, así que `porcQuita` se calcula bien.
+    const hayQuita = porcQuita > 0;
+
+    // Geometría: con quita el recuadro de condiciones lleva 2 ítems más (12 mm) y hay que
+    // devolverlos para que el bloque de firmas no se caiga de la hoja. Se sacan de fondo
+    // vacío, sin mover ningún texto respecto del borde de su propio recuadro:
+    //   5 mm  el aire entre la banda del encabezado (termina en 36) y el primer recuadro
+    //   2 mm  el aire abajo del último ítem de condiciones (5 → 3, el mismo que usa el
+    //         bloque de pago)
+    //   3 mm  la separación entre el recuadro de pago y el de términos (7 → 4)
+    //   2 mm  la separación entre términos y firmas (6 → 4)
+    // Sin quita no se recorta nada: el documento queda milímetro por milímetro como hoy.
+    let y = hayQuita ? 39 : 44;
+    const productos = datos ? datos.productos : {
+        prestamos: parseInt(document.getElementById("cantPrestamos")?.value, 10) || 0,
+        cuotificaciones: parseInt(document.getElementById("cantCuotificaciones")?.value, 10) || 0,
+    };
+    // Este plan nunca incluye tarjeta, así que el texto sale siempre por la rama préstamo.
+    const txtProductos = textoProductosPDF("prestamo", productos);
+
+    // Bloque Datos del Titular. Encabezado celeste propio de este PDF: no se unifica
+    // con bloqueCliente (rojo) porque este acuerdo ya circula con este aspecto.
+    // Con la línea de productos el recuadro pasa de 28 a 35 (el texto apoya en y+31).
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 28, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, txtProductos ? 35 : 28, 3, 3, "F");
     doc.setTextColor(56, 189, 248);
     doc.setFontSize(9);
     doc.setFont("helvetica", "bold");
@@ -703,30 +1134,58 @@ function generarPDFCuotas(numCuotas, valorCuota) {
     doc.setTextColor(255, 255, 255);
     doc.text(`Nombre: ${nombre.toUpperCase()}`, M + 6, y + 17);
     doc.text(`DNI: ${dni}`, M + 6, y + 24);
+    if (txtProductos) {
+        doc.text(`Productos: ${txtProductos}`, M + 6, y + 31);
+    }
 
-    y += 36;
-    // Bloque Condiciones
+    y += txtProductos ? 39 : 32;   // recuadro + 4 de separación
+    // Bloque Condiciones.
+    // Alto 52: con el interlineado de 6 mm el último ítem apoya en y+47 y quedan 5 mm de aire.
+    // Antes eran 60 con paso de 7 mm; entre esto y las separaciones se recuperan los 16 mm
+    // que suman la línea de productos (7) y la cláusula 7 (9), para que el bloque de firmas
+    // quede en la misma y de siempre y no se caiga de la hoja.
+    // Con quita son 8 ítems: el último apoya en y+59 y el recuadro cierra en y+62, dejando
+    // 3 mm de aire (el mismo que ya tiene el bloque de pago).
+    const altoCondiciones = hayQuita ? 62 : 52;
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 60, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, altoCondiciones, 3, 3, "F");
     doc.setTextColor(56, 189, 248);
     doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
     
-    const fechaVenc = obtenerFechaVenc("fechaVencInput");
-    const inputFecha = document.getElementById("fechaVencInput").value;
-    const diaVenc = inputFecha ? new Date(inputFecha + "T12:00:00").getDate() : "--";
+    const fechaVenc = datos ? datos.fechaVenc : obtenerFechaVenc("fechaVencInput");
 
+    // El día del mes de "Cuotas siguientes" NO se puede sacar de `fechaVenc`: llega ya
+    // formateado como texto ("20 de agosto de 2026"). Con `datos` viene aparte en `diaVenc`
+    // —el carrito lo saca de su fecha ISO—; leerlo del input acá mostraría el día que quedó
+    // en pantalla, que puede ser otro que el congelado en la propuesta. Sin `datos`, del DOM.
+    let diaVenc;
+    if (datos) {
+        diaVenc = datos.diaVenc || "--";
+    } else {
+        const inputFecha = document.getElementById("fechaVencInput").value;
+        diaVenc = inputFecha ? new Date(inputFecha + "T12:00:00").getDate() : "--";
+    }
+
+    // La quita y el total a abonar van pegados al saldo, que es contra lo que se comparan.
+    // Sin quita el recuadro queda con los 6 ítems de siempre.
     const items = [
         ["Tipo de acuerdo:", "Plan de pagos sin interés en cuotas fijas"],
         ["Saldo Total:", `$${saldoTotal.toLocaleString("es-AR")}`],
+    ];
+    if (hayQuita) {
+        items.push(["Quita aplicada:", `${porcQuita}% sobre el saldo total`]);
+        items.push(["Total a abonar:", `$${totalAAbonar.toLocaleString("es-AR")}`]);
+    }
+    items.push(
         ["Cantidad de cuotas:", `${numCuotas} cuotas`],
         ["Valor de cuota:", `$${valorCuota.toLocaleString("es-AR")}`],
         ["Vencimiento de cuota:", fechaVenc],
-        ["Cuotas siguientes:", `Todos los días ${diaVenc} de cada mes`],
-    ]; 
+        ["Cuotas siguientes:", `Todos los días ${diaVenc} de cada mes`]
+    );
 
     items.forEach(([label, val], i) => {
-        const ry = y + 17 + i * 7;
-        
+        const ry = y + 17 + i * 6;   // paso de 6 mm, el mismo que usa el PDF de quita
+
         // 1. Dibujamos la etiqueta siempre en gris
         doc.setTextColor(148, 163, 184);
         doc.setFont("helvetica", "normal");
@@ -745,7 +1204,11 @@ function generarPDFCuotas(numCuotas, valorCuota) {
         
         }else if(label === "Cantidad de cuotas:"){
             color = [34,197,94];
-        } 
+        } else if (label === "Quita aplicada:") {
+            color = [245, 158, 11]; // NARANJA, igual que el descuento del PDF manual
+        } else if (label === "Total a abonar:") {
+            color = [34, 197, 94];  // VERDE: es la cifra que el deudor tiene que mirar
+        }
 
         // 3. Aplicamos el color y dibujamos el valor UNA SOLA VEZ
         doc.setTextColor(...color);
@@ -753,9 +1216,13 @@ function generarPDFCuotas(numCuotas, valorCuota) {
         doc.text(val, M + 60, ry);
     });
 
-    y += 68;
+    y += altoCondiciones + 4;   // recuadro + 4 de separación
     // Cuotas Uala: solo aplica a préstamos/cuotificaciones, sin quita
     y = bloquePago(doc, y, "prestamo", false);
+    // `bloquePago` deja 7 mm hasta el bloque siguiente. Con quita se bajan a 4, la misma
+    // separación que ya usan los demás recuadros de este documento. Es fondo vacío: el
+    // recuadro de pago no cambia de alto ni se mueve ninguno de sus textos.
+    if (hayQuita) y -= 3;
 
     const clausulas = [
         "1. El atraso en el pago de cualquier cuota anulará el beneficio.",
@@ -763,9 +1230,13 @@ function generarPDFCuotas(numCuotas, valorCuota) {
         "3. Es obligatorio enviar el comprobante para imputar el pago.",
         "4. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
         "5. Este documento es una propuesta de pago sujeta a aprobación final.",
-        "6. Libre deuda: Una vez abonada la ultima cuota, solicite el libre deuda a hola@Ualá.com.ar"
+        "6. Libre deuda: Una vez abonada la ultima cuota, solicite el libre deuda a hola@Ualá.com.ar",
+        "7. El incumplimiento del pago acordado deja sin efecto el beneficio otorgado y habilita la derivación del caso a instancias de gestión de mayor severidad."
     ];
     y = bloqueTerminos(doc, clausulas, y);
+    // Mismo criterio que arriba: con quita la separación entre términos y firmas pasa de
+    // 6 a 4 mm. Son los últimos 2 de los 12 que hay que devolver.
+    if (hayQuita) y -= 2;
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo); // Usamos el mismo nroAcuerdo de arriba
 
@@ -874,8 +1345,12 @@ function generarPDFPuroManual() {
     doc.text(`Nombre: ${nombre.toUpperCase()}`, M + 6, y + 17);
     doc.text(`DNI: ${dni}`, M + 6, y + 24);
 
-    y += 36;
-    
+    // La cláusula 7 suma 9 mm al bloque de términos. Se devuelven de fondo vacío, igual que
+    // en los otros dos PDF: las separaciones entre recuadros bajan de 8 y 7 a 4 mm, que es
+    // la que ya usan los otros dos documentos desde la Task 9. Ningún texto se mueve
+    // respecto del borde de su propio recuadro.
+    y += 32;   // recuadro de 28 + 4 de separación
+
     // Bloque Condiciones
     doc.setFillColor(30, 41, 59);
     doc.roundedRect(M, y, W - M * 2, 56, 3, 3, "F");
@@ -917,8 +1392,8 @@ function generarPDFPuroManual() {
         doc.text(val, M + 60, ry);
     });
 
-    y += 63; 
-    
+    y += 60;   // recuadro de 56 + 4 de separación
+
     // ¿Hay quita?
     // - Monto a cancelar IGUAL al Saldo Total Actual (con intereses) → SIN quita (pago completo).
     // - Monto a cancelar MENOR que el Saldo Total Actual → CON quita (hubo descuento).
@@ -937,7 +1412,10 @@ function generarPDFPuroManual() {
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
         clausula4,
         "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
+        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar",
+        // Texto legal: copiado palabra por palabra de los otros dos PDF. Es la misma
+        // política para los tres documentos, no se reescribe acá.
+        "7. El incumplimiento del pago acordado deja sin efecto el beneficio otorgado y habilita la derivación del caso a instancias de gestión de mayor severidad."
     ];
     y = bloqueTerminos(doc, clausulas, y);
     bloqueFiremas(doc, y);
