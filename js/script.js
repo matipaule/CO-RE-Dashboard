@@ -191,7 +191,20 @@ function calcularCuotas() {
     // pantalla. Ver `baseDelCalculo` y el guard de `Propuestas.agregar`.
     const base = baseDelCalculo();
 
-    const NIVELES = [0, 10, 20, 30, 40, 50];
+    /*
+     * La grilla de quita × cuotas se despliega entera SOLO desde los 180 días de mora.
+     * Entre 90 y 179 el banco autoriza el plan en cuotas sin intereses, pero sin tocar el
+     * capital, así que se dibuja esa única fila. Las otras cinco irían completas en "—":
+     * no informan nada y llenan de ruido el caso más frecuente. La regla vive en
+     * `PropuestaCore.quitaMaxima`, que igual bloquea celda por celda; esto es la vista.
+     */
+    const hayQuitaDeCapital = diasMoraCuotas >= PropuestaCore.MORA_MIN_QUITA_EN_CUOTAS;
+    if (!hayQuitaDeCapital) {
+        document.getElementById("saldoRedondeado").innerHTML +=
+            `<p style="font-size:0.82rem; color:#fbbf24; margin-top:6px;">Con ${diasMoraCuotas} días de mora solo se puede ofrecer el plan en cuotas sin intereses. La quita de capital en cuotas se habilita a partir de los ${PropuestaCore.MORA_MIN_QUITA_EN_CUOTAS} días.</p>`;
+    }
+
+    const NIVELES = hayQuitaDeCapital ? [0, 10, 20, 30, 40, 50] : [0];
     const max = obtenerMaxCuotas(redondeado);
     // Arranca en 2: el pago único ya lo cubre la solapa Quitas y no se duplica acá.
     const columnas = [2, 3, 6, 12].filter(c => c <= max);

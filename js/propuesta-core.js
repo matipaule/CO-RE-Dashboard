@@ -34,10 +34,23 @@ window.PropuestaCore = (function () {
     return 10;
   }
 
+  /**
+   * Mora mínima para combinar quita de capital CON un plan de cuotas.
+   *
+   * Es una regla distinta de `topeQuitaPorMora`: esa manda en el pago único de la solapa
+   * Quitas, donde desde los 90 días ya hay 20/30/40% de capital. Acá se cruzan las dos
+   * cosas, y el banco autoriza quita de capital en cuotas solo desde los 180 días. Entre
+   * 90 y 179 el plan en cuotas se ofrece sin intereses y sin tocar el capital.
+   */
+  const MORA_MIN_QUITA_EN_CUOTAS = 180;
+
   /** Los dos topes se cruzan: vale el menor. @returns {number|null} */
   function quitaMaxima(diasMora, cuotas) {
     const porMora = topeQuitaPorMora(diasMora);
     if (porMora === null) return null;
+    // El pago único (`cuotas === 1`) no es un plan de cuotas y no entra en la restricción:
+    // lo que sale por la solapa Quitas sigue rigiéndose solo por el tope de mora.
+    if (cuotas > 1 && diasMora < MORA_MIN_QUITA_EN_CUOTAS) return 0;
     return Math.min(porMora, topeQuitaPorCuotas(cuotas));
   }
 
@@ -309,5 +322,5 @@ ${pregunta}`;
   // `fechaVencMasTemprana` se exporta por el mismo motivo: el PDF del carrito la usa para
   // comunicar el MISMO vencimiento que el WhatsApp. Si se saca del export, el acuerdo
   // firmado vuelve a la fecha de su propia foto y las dos piezas se contradicen.
-  return { topeQuitaPorMora, topeQuitaPorCuotas, quitaMaxima, validarAgregado, MAX_POR_DEUDA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje };
+  return { topeQuitaPorMora, topeQuitaPorCuotas, quitaMaxima, MORA_MIN_QUITA_EN_CUOTAS, validarAgregado, MAX_POR_DEUDA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje };
 })();
