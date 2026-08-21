@@ -19,7 +19,7 @@ function activarSeccion(id) {
         if(a.dataset.seccion === id) a.classList.add('active');
     });
     
-    document.querySelectorAll('main section').forEach(sec => {
+    document.querySelectorAll('main > .container > section').forEach(sec => {
         sec.className = sec.id === id ? 'pagina-activa card' : 'pagina-oculta card';
     });
 }
@@ -28,8 +28,20 @@ function navegarA(seccionId) {
     activarSeccion(seccionId);
 }
 
+function navegarAModalidad(modalidad) {
+    if (modalidad === "cuotas_sin_quita") {
+        navegarA("cuotas");
+        document.getElementById("tablaCuotas").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+    }
+    navegarA("quitas");
+    const destino = modalidad === "quita_en_cuotas" ? "panelQuitaEnCuotas" : "tituloPagoUnico";
+    document.getElementById(destino).scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 window.onload = () => {
     activarSeccion('inicio');
+    renderResumenes();
 };
 
 /** 2. FORMATEO Y ALERTAS DE INPUT **/
@@ -56,277 +68,265 @@ document.querySelectorAll('input').forEach(input => {
 });
 
 /** 3. CALCULADORA DE CUOTAS **/
-function obtenerMaxCuotas(saldo) {
-    if (saldo <= 1000000) return 12;
-    if (saldo <= 6000000) return 15;
-    if (saldo <= 20000000) return 18;
-    return 36;
+const estadoOfertas = {
+    cuotas: new Map(),
+    pagoUnico: new Map(),
+    quitaEnCuotas: new Map()
+};
+const contextoCuotas = new Map();
+const contextoQuitas = new Map();
+
+function mostrarEstadoOfertas(id, disponible, motivo) {
+    const estado = document.getElementById(id);
+    if (estado) estado.textContent = disponible ? "" : motivo;
 }
 
-/**
- * Borra la grilla y deja un aviso escrito en la tabla.
- *
- * POLÍTICA DE `calcularCuotas`: si no va a dibujar una grilla válida, no puede quedar NINGUNA
- * grilla en pantalla. Todos sus cortes tempranos pasan por acá; no es un caso especial de tarjeta.
- *
- * No es cosmético. Un alert se cierra y no deja rastro, pero las celdas de la grilla anterior
- * siguen dibujadas y siguen siendo clickeables, llamando a `Propuestas.agregar` con los montos y
- * los topes del cálculo viejo. El caso peor es la mora: si el operador recalcula bajando la mora
- * de 200 a 50 días ve el aviso de los 90 días, pero la grilla que quedó se armó con el tope de
- * 200 y le permite sumar al carrito una combinación de quita y cuotas que la mora actualmente
- * cargada ya no autoriza — justo lo que `quitaMaxima` existe para impedir.
- *
- * Los guards de `propuestas.js` no lo tapan: `datosQueCambiaron` compara contra la primera opción
- * de la misma deuda, así que con el carrito vacío no hay contra qué comparar, devuelve null y el
- * alta pasa sin control — guardando una foto con el capital y la mora nuevos pero con el
- * `montoTotal` calculado sobre los viejos.
- */
-function vaciarGrillaCuotas(mensaje) {
-    // Por el mismo motivo que se borra la grilla: la fila de acción trabaja sobre el plan
-    // elegido, que se calculó con la mora y el capital viejos. Dejarla en pantalla sería
-    // dejar los tres botones —copiar, PDF y sumar al carrito— colgados de esos números.
-    limpiarPlanElegido();
-
-    const encabezado = document.getElementById("tablaCuotasHead");
-    if (encabezado) encabezado.innerHTML = "";
-
+function invalidarNegociacion(mensaje) {
+    estadoOfertas.cuotas.clear();
+    estadoOfertas.pagoUnico.clear();
+    estadoOfertas.quitaEnCuotas.clear();
+    contextoCuotas.clear();
+    contextoQuitas.clear();
+    planElegido = null;
+    ["#tablaCuotas tbody", "#tablaPagoUnico tbody", "#tablaQuitaEnCuotas tbody"].forEach((selector) => {
+        const cuerpo = document.querySelector(selector);
+        if (cuerpo) cuerpo.innerHTML = "";
+    });
     const base = document.getElementById("saldoRedondeado");
     if (base) base.innerHTML = "";
-
-    const cuerpo = document.querySelector("#tablaCuotas tbody");
-    if (cuerpo) {
-        cuerpo.innerHTML = `<tr><td style="text-align:center; padding:20px;">${mensaje}</td></tr>`;
+    const atajos = document.getElementById("atajosCuotas");
+    if (atajos) atajos.innerHTML = "";
+    const selector = document.getElementById("selectorCuotas");
+    if (selector) {
+        selector.innerHTML = "";
+        selector.disabled = true;
+    }
+    renderAccionPlan();
+    renderResumenes();
+    if (mensaje !== undefined) {
+        ["estadoCuotas", "estadoPagoUnico", "estadoQuitaEnCuotas"].forEach((id) =>
+            mostrarEstadoOfertas(id, false, mensaje)
+        );
     }
 }
 
-const AVISO_TARJETA_SIN_CUOTAS =
-    "La tarjeta de crédito no admite plan de cuotas. Ofrecé pago único con quita desde la solapa Quitas.";
+function isoFechaLocal(fecha) {
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dia = String(fecha.getDate()).padStart(2, "0");
+    return fecha.getFullYear() + "-" + mes + "-" + dia;
+}
 
-/**
- * Celda de una combinación que no está autorizada, sea por tope de quita o por cuota mínima.
- * Se dibuja como "—" y no se oculta: el operador tiene que ver que la opción existe pero que
- * no la puede ofrecer.
- */
-function celdaBloqueada() {
-    const td = document.createElement("td");
-    td.className = "esc-td-bloqueada";
-    td.textContent = "—";
-    return td;
+function contextoCuotasDelCalculo(datos) {
+    const input = document.getElementById("fechaVencInput");
+    const vencimiento = input && input.value
+        ? new Date(input.value + "T12:00:00")
+        : new Date();
+    if (!(input && input.value)) vencimiento.setDate(vencimiento.getDate() + 2);
+    return Object.freeze({
+        capital: datos.capital,
+        totalConInteres: datos.totalConInteres,
+        diasMora: datos.diasMora,
+        fechaInicioMoraISO: datos.fechaInicioMoraISO,
+        tipo: datos.tipo,
+        nombre: datos.nombre,
+        dni: datos.dni,
+        productos: datos.productos,
+        fechaVenc: vencimiento.toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" }),
+        fechaVencISO: input && input.value ? input.value : isoFechaLocal(vencimiento),
+        diaVenc: vencimiento.getDate(),
+    });
 }
 
 function calcularCuotas() {
-    // La grilla se rehace entera en cada cálculo, así que la elección anterior apuntaría a
-    // una celda que ya no existe. Los cortes tempranos la limpian por vaciarGrillaCuotas;
-    // esto cubre el recálculo que SÍ termina dibujando una grilla nueva.
-    limpiarPlanElegido();
+    recalcularNegociacion();
+}
 
-    /*
-     * La tarjeta se corta ANTES que la validación de mora, y no después como el resto de los
-     * chequeos: la tarjeta no admite cuotas con mora ni sin ella. Cortando por mora primero, una
-     * tarjeta con menos de 90 días se iba por el aviso de "esperá a los 90 días" —que además
-     * sugiere que después sí va a poder cuotificarse, y nunca va a poder— sin limpiar la grilla,
-     * dejando en pantalla las celdas clickeables del préstamo anterior.
-     */
-    const tipoActual = document.getElementById("tipoProductoQuita")?.value || "prestamo";
-    if (tipoActual === "tarjeta") {
-        vaciarGrillaCuotas(AVISO_TARJETA_SIN_CUOTAS);
-        alert(AVISO_TARJETA_SIN_CUOTAS);
-        return;
-    }
+/** Calcula las tres modalidades sobre una única foto de los datos compartidos. */
+function recalcularNegociacion() {
+    invalidarNegociacion();
+    const datos = Propuestas.leerDeuda();
+    const cuotas = PropuestaCore.opcionesCuotas(datos);
+    const quitas = PropuestaCore.opcionesQuita(datos);
+    const contextoDeCuotas = contextoCuotasDelCalculo(datos);
+    const contextoDeQuitas = contextoQuitasDelCalculo(datos);
 
-    /*
-     * Saldo vacío: se limpia la grilla pero NO se alerta, y es a propósito. `calcularCuotas`
-     * también corre con Enter desde cualquier campo de la solapa (ver el listener de arriba), así
-     * que alertar acá le tiraría un popup al operador cada vez que apreta Enter con la pantalla
-     * todavía en blanco. El mensaje en la tabla alcanza y es el estado vacío natural.
-     */
-    const inputVal = document.getElementById("saldoInput").value;
-    if (!inputVal) {
-        vaciarGrillaCuotas("Cargá el Saldo CRM para generar los planes en cuotas.");
-        return;
-    }
-
-    let corregido = inputVal;
-    if(inputVal.includes('.') && !inputVal.includes(',')) {
-        if(inputVal.split('.').pop().length <= 2) corregido = inputVal.replace('.', ',');
-    }
-
-    const limpio = corregido.replace(/\./g, "").replace(",", ".");
-    const saldo = parseFloat(limpio);
-
-    if (isNaN(saldo) || saldo <= 0) {
-        vaciarGrillaCuotas("El Saldo CRM cargado no es un monto válido.");
-        alert("Ingrese un monto válido.");
-        return;
-    }
-
-    // Validación: mínimo 90 días de mora para calcular cuotas
-    const diasMoraCuotas = parseInt(document.getElementById("moraInputCuotas")?.value) || 0;
-    if (diasMoraCuotas < 90) {
-        const msg = diasMoraCuotas > 0
-            ? `⚠️ Este caso tiene ${diasMoraCuotas} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.\n\nEsperá hasta cumplir los 90 días para evitar reformulaciones por intereses generados.`
-            : `⚠️ Ingresá los días de mora antes de calcular cuotas.\n\nLas cuotas solo se pueden ofrecer a partir de los 90 días de mora.`;
-        vaciarGrillaCuotas(diasMoraCuotas > 0
-            ? `Este caso tiene ${diasMoraCuotas} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días.`
-            : "Ingresá los días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.");
-        alert(msg);
-        return;
-    }
-
-    const redondeado = Math.ceil(saldo);
-    document.getElementById("saldoRedondeado").innerHTML = `Base: <strong>$${redondeado.toLocaleString("es-AR")}</strong>`;
-
-    // La quita se calcula SIEMPRE sobre el capital, nunca sobre el total con intereses.
-    const capitalCuotas = parseFloat(
-        (document.getElementById("capitalCuotaInput")?.value || "0").replace(/\./g, "").replace(",", ".")
-    ) || 0;
-
-    if (capitalCuotas <= 0) {
-        vaciarGrillaCuotas("Cargá el Saldo Capital para calcular las quitas sobre los planes.");
-        alert("Cargá el Saldo Capital para calcular las quitas sobre los planes.");
-        return;
-    }
-
-    // Base de ESTE cálculo: viaja en el plan elegido hasta el ➕ y ahí se compara contra la
-    // pantalla. Ver `baseDelCalculo` y el guard de `Propuestas.agregar`.
-    const base = baseDelCalculo();
-
-    /*
-     * La grilla de quita × cuotas se despliega entera SOLO desde los 180 días de mora.
-     * Entre 90 y 179 el banco autoriza el plan en cuotas sin intereses, pero sin tocar el
-     * capital, así que se dibuja esa única fila. Las otras cinco irían completas en "—":
-     * no informan nada y llenan de ruido el caso más frecuente. La regla vive en
-     * `PropuestaCore.quitaMaxima`, que igual bloquea celda por celda; esto es la vista.
-     */
-    const hayQuitaDeCapital = diasMoraCuotas >= PropuestaCore.MORA_MIN_QUITA_EN_CUOTAS;
-    if (!hayQuitaDeCapital) {
-        document.getElementById("saldoRedondeado").innerHTML +=
-            `<p style="font-size:0.82rem; color:#fbbf24; margin-top:6px;">Con ${diasMoraCuotas} días de mora solo se puede ofrecer el plan en cuotas sin intereses. La quita de capital en cuotas se habilita a partir de los ${PropuestaCore.MORA_MIN_QUITA_EN_CUOTAS} días.</p>`;
-    }
-
-    const NIVELES = hayQuitaDeCapital ? [0, 10, 20, 30, 40, 50] : [0];
-    const max = obtenerMaxCuotas(redondeado);
-    // Arranca en 2: el pago único ya lo cubre la solapa Quitas y no se duplica acá.
-    const columnas = [2, 3, 6, 12].filter(c => c <= max);
-
-    document.getElementById("tablaCuotasHead").innerHTML =
-        "<th>Quita</th>" + columnas.map(c => `<th>${c} cuotas</th>`).join("");
-
-    const tablaBody = document.querySelector("#tablaCuotas tbody");
-    tablaBody.innerHTML = "";
-    let hayAlguna = false;
-
-    NIVELES.forEach(porc => {
-        const fila = document.createElement("tr");
-        fila.innerHTML = `<td><strong>${porc === 0 ? "Solo intereses" : porc + "%"}</strong></td>`;
-
-        columnas.forEach(c => {
-            const tope = PropuestaCore.quitaMaxima(diasMoraCuotas, c);
-
-            if (tope === null || porc > tope) {
-                fila.appendChild(celdaBloqueada());
-                return;
-            }
-
-            const total = Math.ceil(capitalCuotas * (1 - porc / 100));
-            const valor = Math.ceil(total / c);
-
-            if (valor < 50000) {   // cuota mínima, ya vigente
-                fila.appendChild(celdaBloqueada());
-                return;
-            }
-
-            hayAlguna = true;
-            const td = document.createElement("td");
-            td.className = "esc-td-ok";
-            td.innerHTML = `$${valor.toLocaleString("es-AR")}`;
-            td.title = `${c} cuotas · ${porc}% de quita · total $${total.toLocaleString("es-AR")}`;
-            // El click ELIGE el plan; sumarlo al carrito pasó a ser un botón de la fila de
-            // acción. Es el precio de tener las tres acciones (copiar, PDF y sumar) sobre
-            // el mismo plan: si el click siguiera agregando, no habría dónde pararse para
-            // copiar o emitir el PDF de una combinación sin antes meterla en la propuesta.
-            td.onclick = () => elegirPlan(porc, c, total, valor, td, base);
-            fila.appendChild(td);
-        });
-
-        tablaBody.appendChild(fila);
+    cuotas.opciones.forEach((opcion) => {
+        estadoOfertas.cuotas.set(opcion.id, opcion);
+        contextoCuotas.set(opcion.id, contextoDeCuotas);
+    });
+    quitas.pagoUnico.opciones.forEach((opcion) => {
+        estadoOfertas.pagoUnico.set(opcion.id, opcion);
+        contextoQuitas.set(opcion.id, contextoDeQuitas);
+    });
+    quitas.quitaEnCuotas.opciones.forEach((opcion) => {
+        estadoOfertas.quitaEnCuotas.set(opcion.id, opcion);
+        contextoQuitas.set(opcion.id, contextoDeQuitas);
     });
 
-    if (!hayAlguna) {
-        tablaBody.innerHTML = `<tr><td colspan="${columnas.length + 1}" style="text-align:center; padding:20px;">No hay planes en cuotas disponibles para este saldo y esta mora.</td></tr>`;
-    }
+    mostrarEstadoOfertas("estadoCuotas", cuotas.disponible, cuotas.motivo);
+    mostrarEstadoOfertas("estadoPagoUnico", quitas.pagoUnico.disponible, quitas.pagoUnico.motivo);
+    mostrarEstadoOfertas("estadoQuitaEnCuotas", quitas.quitaEnCuotas.disponible, quitas.quitaEnCuotas.motivo);
+    const saldo = document.getElementById("saldoRedondeado");
+    if (saldo && cuotas.opciones.length) saldo.innerHTML = `Saldo total a regularizar: <strong>$${cuotas.opciones[0].saldoTotal.toLocaleString("es-AR")}</strong>`;
+    renderCuotas(cuotas.opciones);
+    renderAtajosCuotas(cuotas.opciones);
+    renderPagoUnico(quitas.pagoUnico.opciones);
+    renderQuitaEnCuotas(quitas.quitaEnCuotas.opciones);
+    renderResumenes({ cuotas, pagoUnico: quitas.pagoUnico, quitaEnCuotas: quitas.quitaEnCuotas });
 }
 
-/**
- * Plan que el operador eligió en la grilla, o null si todavía no eligió ninguno.
- *
- * Es la única fuente de la fila de acción: Copiar, PDF y Sumar a la propuesta trabajan
- * sobre ESTE plan y no sobre lo que se pueda leer de la grilla, que se rehace entera en
- * cada cálculo. `porc` es la quita sobre CAPITAL (interna, la que manda en los topes);
- * `total` es lo que efectivamente va a pagar el deudor.
- *
- * `base` es la foto de los datos con los que se armó la grilla; la usa el ➕ para no dejar
- * sumar un plan calculado contra otra pantalla (ver `baseDelCalculo`).
- */
+[
+    "nombreCuotaInput", "dniCuotaInput", "saldoInput", "moraInputCuotas", "fechaInicioMoraInputCuotas", "capitalCuotaInput",
+    "fechaVencInput", "cantPrestamosCuotas", "cantCuotificacionesCuotas", "tipoProductoCuotas",
+    "nombreInput", "dniInput", "totalConInteresInput", "moraInput", "fechaInicioMoraInput", "capitalInput",
+    "fechaVencInputQuita", "cantPrestamos", "cantCuotificaciones", "tipoProductoQuita"
+].forEach((id) => {
+    const campo = document.getElementById(id);
+    if (!campo) return;
+    campo.addEventListener(campo.tagName === "SELECT" ? "change" : "input", () => {
+        if (estadoOfertas.cuotas.size || estadoOfertas.pagoUnico.size || estadoOfertas.quitaEnCuotas.size || planElegido) {
+            invalidarNegociacion("Recalculá las opciones con los datos actuales.");
+        }
+    });
+});
+
 let planElegido = null;
 
-/** Marca la celda, guarda el plan y llena la fila de acción. La marca anterior se borra. */
-function elegirPlan(porc, cuotas, total, valor, celda, base) {
-    planElegido = { porc: porc, cuotas: cuotas, total: total, valor: valor, base: base };
+function renderCuotas(opciones) {
+    const cuerpo = document.querySelector("#tablaCuotas tbody");
+    if (!cuerpo) return;
+    cuerpo.innerHTML = "";
+    opciones.forEach((opcion) => {
+        const fila = document.createElement("tr");
+        fila.id = `cuota-${opcion.id}`;
+        fila.tabIndex = -1;
+        fila.innerHTML = `<td><strong class="prioridad-${opcion.prioridad}">${textoSemaforo(opcion)}</strong><br><small>${opcion.motivoPrioridad}</small></td>` +
+            `<td>${opcion.cuotas} cuotas</td>` +
+            `<td>$${opcion.valorCuota.toLocaleString("es-AR")}</td>` +
+            `<td>$${opcion.montoTotal.toLocaleString("es-AR")}</td>`;
+        const acciones = document.createElement("td");
+        const boton = document.createElement("button");
+        boton.type = "button";
+        boton.className = "copiar-btn";
+        boton.textContent = "Seleccionar";
+        boton.addEventListener("click", () => seleccionarPlanCuotas(opcion.id));
+        acciones.appendChild(boton);
+        fila.appendChild(acciones);
+        cuerpo.appendChild(fila);
+    });
+}
 
+function renderAtajosCuotas(opciones) {
+    const atajos = document.getElementById("atajosCuotas");
+    const selector = document.getElementById("selectorCuotas");
+    if (!atajos || !selector) return;
+    atajos.innerHTML = "";
+    selector.innerHTML = '<option value="">Seleccioná cuotas</option>';
+    opciones.forEach((opcion) => {
+        const option = document.createElement("option");
+        option.value = opcion.id;
+        option.textContent = `${opcion.cuotas} cuotas`;
+        selector.appendChild(option);
+        if ([3, 6, 12].includes(opcion.cuotas)) {
+            const boton = document.createElement("button");
+            boton.type = "button";
+            boton.className = "copiar-btn";
+            boton.textContent = `${opcion.cuotas} cuotas`;
+            boton.addEventListener("click", () => seleccionarPlanCuotas(opcion.id));
+            atajos.appendChild(boton);
+        }
+    });
+    selector.disabled = opciones.length === 0;
+    selector.onchange = () => {
+        if (selector.value) seleccionarPlanCuotas(selector.value);
+    };
+}
+
+function seleccionarPlanCuotas(id) {
+    const opcion = estadoOfertas.cuotas.get(id);
+    if (!opcion) {
+        mostrarEstadoOfertas("estadoCuotas", false, "Recalculá las opciones con los datos actuales.");
+        return;
+    }
+    planElegido = opcion;
     document.querySelectorAll("#tablaCuotas .esc-td-elegida")
-        .forEach(td => td.classList.remove("esc-td-elegida"));
-    if (celda) celda.classList.add("esc-td-elegida");
-
+        .forEach((fila) => fila.classList.remove("esc-td-elegida"));
+    const fila = document.getElementById(`cuota-${id}`);
+    if (fila) {
+        fila.classList.add("esc-td-elegida");
+        fila.focus();
+    }
+    const selector = document.getElementById("selectorCuotas");
+    if (selector) selector.value = id;
     renderAccionPlan();
 }
 
-/** Suelta el plan elegido y esconde la fila de acción. */
-function limpiarPlanElegido() {
-    planElegido = null;
-    document.querySelectorAll("#tablaCuotas .esc-td-elegida")
-        .forEach(td => td.classList.remove("esc-td-elegida"));
-    renderAccionPlan();
+function planCuotasActual() {
+    if (planElegido && estadoOfertas.cuotas.get(planElegido.id) === planElegido) return planElegido;
+    mostrarEstadoOfertas("estadoCuotas", false, "Recalculá las opciones con los datos actuales.");
+    return null;
 }
 
-/**
- * Dibuja el resumen del plan elegido. El porcentaje que se muestra acá es el de la grilla
- * —sobre capital— porque esta línea la lee el operador, no el deudor: es la que le confirma
- * que apretó la celda que quería. Al deudor, en cambio, el mensaje y el PDF le hablan
- * siempre del porcentaje sobre el saldo total.
- */
 function renderAccionPlan() {
     const fila = document.getElementById("accionPlan");
     if (!fila) return;
 
-    if (!planElegido) { fila.style.display = "none"; return; }
+    if (!planElegido) { fila.hidden = true; return; }
 
     const p = planElegido;
-    const quita = p.porc === 0 ? "solo intereses" : `${p.porc}% de quita`;
     const texto = document.getElementById("accionPlanTexto");
     if (texto) {
-        texto.innerHTML = `Plan elegido: <strong>${p.cuotas} cuotas</strong> con ${quita} — ` +
-            `${p.cuotas} × $${p.valor.toLocaleString("es-AR")} ` +
-            `(total $${p.total.toLocaleString("es-AR")})`;
+        texto.innerHTML = `Acuerdo de Pago sin quita: <strong>${p.cuotas} cuotas</strong> — ` +
+            `${p.cuotas} × $${p.valorCuota.toLocaleString("es-AR")} ` +
+            `(total efectivo $${p.montoTotal.toLocaleString("es-AR")})`;
     }
-    fila.style.display = "block";
+    fila.hidden = false;
 }
 
 function copiarPlanElegido(btn) {
-    if (!planElegido) return;
-    copiarPlan(planElegido.cuotas, planElegido.valor, btn, planElegido.total);
+    const opcion = planCuotasActual();
+    if (opcion) copiarPlan(opcion, btn);
 }
 
 function generarPDFPlanElegido() {
-    if (!planElegido) return;
-    // Sin `datos` el PDF lee la ficha de la solapa, que es justo la que el operador tiene
-    // a la vista: este plan es suelto y no pasó por el carrito.
-    generarPDFCuotas(planElegido.cuotas, planElegido.valor);
+    const opcion = planCuotasActual();
+    const contexto = opcion && contextoCuotas.get(opcion.id);
+    if (!contexto) {
+        mostrarEstadoOfertas("estadoCuotas", false, "Recalculá las opciones con los datos actuales.");
+        return;
+    }
+    generarPDFPlanCuotas(opcion, contexto);
 }
 
 function agregarPlanElegido() {
-    if (!planElegido) return;
-    Propuestas.agregar(planElegido.porc, planElegido.cuotas, planElegido.total, planElegido.base);
+    const opcion = planCuotasActual();
+    if (opcion) agregarPlanCuotas(opcion);
+}
+
+function agregarPlanCuotas(opcion) {
+    const base = contextoCuotas.get(opcion.id);
+    if (!base) {
+        mostrarEstadoOfertas("estadoCuotas", false, "Recalculá las opciones con los datos actuales.");
+        return;
+    }
+    Propuestas.agregarOpcion(opcionCompleta(opcion, base));
+}
+
+function generarPDFPlanCuotas(opcion, contexto) {
+    generarPDFOpcion(opcionCompleta(opcion, contexto));
+}
+
+/** Une el contexto capturado y la opción canónica sin derivar ningún monto. */
+function opcionCompleta(opcion, contexto) {
+    return Object.freeze({
+        ...contexto,
+        ...opcion,
+        deuda: contexto.tipo,
+        tipo: contexto.tipo,
+        totalConInteres: contexto.totalConInteres,
+        saldoTotal: opcion.saldoTotal ?? contexto.totalConInteres,
+        productos: Object.freeze({ ...(contexto.productos || {}) })
+    });
 }
 
 /**
@@ -350,76 +350,18 @@ function nombreOperador() {
 /**
  * Mensaje de WhatsApp de UN plan suelto (el elegido en la grilla), sin pasar por el carrito.
  *
- * `montoTotal` es el total del plan tal como lo calculó la grilla; sin él se cae en `c * v`,
- * que es lo que esta función hacía sola cuando las cuotas no llevaban quita.
- *
- * Ese es el arreglo que trae esta tarea. El texto viejo —"cuotificación SIN INTERÉS sobre su
- * deuda total"— se escribió cuando ningún plan en cuotas perdonaba capital: decía la verdad
- * porque lo financiado ERA la deuda entera. Con la grilla de quita × cuotas un plan puede
- * condonar parte del capital, y ahí la misma frase le estaría diciendo al deudor que no se le
- * perdona nada mientras se le perdona. Por eso el criterio para partir el mensaje es si queda
- * quita SOBRE EL SALDO TOTAL, que es exactamente la afirmación que se vuelve falsa —y no si
- * `porc` es 0—: una fila de "solo intereses" no toca el capital pero igual financia menos que
- * la deuda informada, así que también tiene que decirlo.
- *
- * El porcentaje que se comunica es siempre el del saldo total, nunca el de capital: ese es
- * interno y solo manda en los topes y en la dominancia. Mismo criterio que copiarChatQuita y
- * que el mensaje del carrito (PropuestaCore.lineaOpcion).
+ * Recibe la foto inmutable de la opción seleccionada, no valores sueltos de una fila que ya
+ * podría haber quedado desactualizada.
  */
-function copiarPlan(c, v, btn, montoTotal) {
-    const totalFinanciado = montoTotal || c * v;
-    const nombre = (document.getElementById("nombreCuotaInput")?.value || "").trim();
-
-    const saldoTotal = parseFloat(
-        (document.getElementById("saldoInput")?.value || "0").replace(/\./g, "").replace(",", ".")
-    ) || 0;
-
-    // Mismo cálculo que usa el carrito para `quitaSobreTotal` (propuestas.js).
-    const quitaSobreTotal = saldoTotal > 0
-        ? Math.floor(((saldoTotal - totalFinanciado) / saldoTotal) * 100)
-        : 0;
-    const conQuita = quitaSobreTotal > 0;
-
-    const diasMora = parseInt(document.getElementById("moraInputCuotas")?.value) || 0;
-    const fechaVenc = obtenerFechaVenc("fechaVencInput");
-
-    const productos = PropuestaCore.formatearProductos({
-        prestamos: parseInt(document.getElementById("cantPrestamos")?.value, 10) || 0,
-        cuotificaciones: parseInt(document.getElementById("cantCuotificaciones")?.value, 10) || 0,
-    });
-
-    // Un plan en cuotas es siempre de préstamos: la tarjeta no admite cuotificación.
-    const datosPago = PropuestaCore.textoCuenta("prestamo", conQuita);
-
-    // Mismo saludo que el mensaje del carrito, incluido el caso del operador sin cargar.
-    const saludo = PropuestaCore.presentacion(nombre, nombreOperador());
-
-    const encabezado = conQuita
-        ? `${saludo} Logré gestionarte un beneficio del ${quitaSobreTotal}% de quita sobre el saldo total adeudado, para que puedas regularizar tu situación en cuotas SIN INTERÉS.`
-        : `${saludo} Logré gestionarte un beneficio de cuotificación SIN INTERÉS sobre tu deuda total (saldo vencido + cuotas a vencer).`;
-
-    const detalle = [
-        productos ? `• Productos en gestión: ${productos}` : null,
-        conQuita ? `• Saldo total adeudado (con intereses): $${saldoTotal.toLocaleString("es-AR")}` : null,
-        conQuita && diasMora > 0 ? `• Días de mora: ${diasMora}` : null,
-        conQuita ? `• Quita aplicada: ${quitaSobreTotal}% sobre el saldo total` : null,
-        `• Monto total a financiar: $${totalFinanciado.toLocaleString("es-AR")}`,
-        `• Plan: ${c} cuotas fijas de $${v.toLocaleString("es-AR")} (sin interés)`,
-    ].filter(Boolean).join("\n");
-
-    const txt = `${encabezado}
-
-📋 Detalle de la propuesta:
-${detalle}
-
-⏰ Tenés tiempo de confirmar y abonar la primera cuota hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
-⚠️ Este beneficio aplica exclusivamente a préstamos y cuotificaciones; la tarjeta de crédito, en caso de poseerla, queda excluida.
-
-💳 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
-${datosPago}
-
-Importante: avisame antes de pagar y mandame el comprobante por esta vía.
-Quedo a disposición.`;
+function copiarPlan(opcion, btn) {
+    const contexto = contextoCuotas.get(opcion.id);
+    if (!contexto) return;
+    const foto = opcionCompleta(opcion, contexto);
+    if (!foto.fechaInicioMoraISO) {
+        alert("⚠️ Completá la fecha de inicio de mora de Emerix y recalculá las opciones antes de copiar el mensaje.");
+        return;
+    }
+    const txt = PropuestaCore.armarMensaje([foto], { nombre: foto.nombre, dni: foto.dni }, { operador: nombreOperador() });
 
     navigator.clipboard.writeText(txt).then(() => {
         const original = btn.innerText;
@@ -556,16 +498,6 @@ function obtenerDatosCuenta(tipo, conQuita) {
     };
 }
 
-/** Texto formateado para insertar en mensajes de WhatsApp (copiar/pegar). */
-function obtenerDatosCuentaTexto(tipo, conQuita) {
-    const d = obtenerDatosCuenta(tipo, conQuita);
-    let txt = `CBU: ${d.cbu}`;
-    if (d.alias) txt += `\nAlias: ${d.alias}`;
-    txt += `\nRazón Social: ${d.razonSocial}\nCUIT: ${d.cuit}`;
-    if (!d.alias) txt += `\nBanco: ${d.banco}`;
-    return txt;
-}
-
 function bloquePago(doc, y, tipo, conQuita) {
     const W = 210, M = 20;
     const datos = obtenerDatosCuenta(tipo, conQuita);
@@ -677,7 +609,7 @@ function bloqueFiremas(doc, y) {
 }
 
 /** `datos` es opcional: es una foto del carrito. Sin él lee del DOM, igual que siempre. */
-function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
+function generarPDFQuita(montoFinal, porcReal, tipoParam, datos, opcion) {
     const nombre = datos ? datos.nombre : (document.getElementById("nombreInput")?.value || "");
     const dni    = datos ? datos.dni    : (document.getElementById("dniInput")?.value || "");
 
@@ -724,14 +656,15 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
     const diasMora = datos ? datos.diasMora : (parseInt(document.getElementById("moraInput")?.value) || 0);
     const ahorroReal = totalConInteres - montoFinal;
     const fechaVenc = datos ? datos.fechaVenc : obtenerFechaVenc("fechaVencInputQuita");
+    const capital = opcion ? opcion.capital : (datos ? datos.capital : 0);
+    const interesesCondonados = opcion ? opcion.interesesCondonados : Math.max(0, totalConInteres - capital);
+    const descuentoCapital = opcion ? opcion.descuentoCapital : 0;
 
-    // Recuadro de condiciones.
-    // Alto 52: el último ítem apoya en y+47 (y+17 + 5*6) y quedan 5 mm de aire abajo.
-    // Antes eran 64 con 17 mm de aire muerto; los 15 mm recuperados (12 de recuadro y 3
-    // de separación) son los que suman la línea de productos (6) y la cláusula 7 (9),
-    // así el bloque de firmas queda en la misma y de siempre y no se cae de la hoja.
+    // Siete ítems canónicos necesitan 58 mm; seis ítems legados, 52 mm. En ambos casos el
+    // último renglón conserva 5 mm de aire y la firma completa queda antes del pie.
+    const altoCondiciones = opcion ? 58 : 52;
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 52, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, altoCondiciones, 3, 3, "F");
     
     doc.setTextColor(220, 38, 38);
     doc.setFontSize(8);
@@ -742,7 +675,15 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
         ? "Cancelación de deuda de Tarjeta de Crédito"
         : "Cancelación total con descuento por pago único (Préstamo)";
 
-    const items = [
+    const items = opcion ? [
+        ["Tipo:", opcion.esPagoTotal ? "Cancelación total sin quita" : "Cancelación con quita"],
+        ["Saldo Total Actual:", formatoMonto(totalConInteres)],
+        ["Saldo capital:", formatoMonto(capital)],
+        ["Intereses condonados:", formatoMonto(interesesCondonados)],
+        ["Descuento sobre capital:", opcion.quita + "% (" + formatoMonto(descuentoCapital) + ")"],
+        ["Monto final a abonar:", formatoMonto(opcion.montoTotal)],
+        ["Vencimiento de la oferta:", fechaVenc],
+    ] : [
         ["Tipo:", tipoDesc],
         ["Saldo Total Actual:", "$" + totalConInteres.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Monto final a abonar:", "$" + montoFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
@@ -772,15 +713,13 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
         doc.setFont("helvetica", "normal");
     });
 
-    y += 56;   // 52 del recuadro + 4 de separación
+    y += altoCondiciones + 4;
 
     // Bloque de pago — toda la solapa Quitas usa la cuenta CON quita.
     // La cuenta SIN quita solo aplica desde el PDF Manual.
     y = bloquePago(doc, y, tipo, true);
 
-    const clausula4 = tipo === "tarjeta"
-        ? "4. La rehabilitación de la tarjeta solo ocurre si el pago se realiza antes de los 30 días de atraso. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta."
-        : "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
+    const clausula4 = "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
 
     const clausulas = [
         "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
@@ -788,8 +727,7 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
         clausula4,
         "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar",
-        "7. El incumplimiento del pago acordado deja sin efecto el beneficio otorgado y habilita la derivación del caso a instancias de gestión de mayor severidad."
+        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
     ];
 
     y = bloqueTerminos(doc, clausulas, y);
@@ -799,266 +737,280 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos) {
     doc.save("Acuerdo_Cancelatorio_" + nombre.replace(/\s+/g, "_") + "_" + nroAcuerdo + ".pdf");
 }
 
-/** 4. CAMPAÑA DE QUITAS **/
-function generarEscalaQuitas() {
-    const capInput = document.getElementById("capitalInput").value;
-    const totalInput = document.getElementById("totalConInteresInput").value;
-    const moraInput = document.getElementById("moraInput").value;
-    
-    if (!capInput || !totalInput || !moraInput) return alert("Faltan datos (Capital, Total o Mora)");
+/** Acuerdo específico para una oferta canónica de quita en cuotas. */
+function generarPDFQuitaEnCuotas(opcion, datos) {
+    const nombre = datos ? datos.nombre : "";
+    const dni = datos ? datos.dni : "";
+    if (!nombre || !dni) {
+        alert("Para generar el PDF completá el Nombre y DNI del titular.");
+        return;
+    }
 
-    const capital = parseFloat(capInput.replace(/\./g, "").replace(",", "."));
-    const totalConInteres = parseFloat(totalInput.replace(/\./g, "").replace(",", "."));
-    const diasMora = parseInt(moraInput);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
+    const W = 210, M = 20;
+    const hoy = encabezadoPDF(doc, "ACUERDO DE QUITA EN CUOTAS");
+    const nroAcuerdo = "QCU-" + hoy.getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
 
-    // Capturar el tipo AL MOMENTO DE CALCULAR, no cuando se hace click en PDF
-    const tipoSeleccionado = document.getElementById("tipoProductoQuita")
-        ? document.getElementById("tipoProductoQuita").value
-        : "prestamo";
+    doc.setFontSize(8);
+    doc.setTextColor(255, 180, 180);
+    doc.text("N° " + nroAcuerdo, W - M, 30, { align: "right" });
 
-    // Política de quitas por días de mora:
-    //   < 60 días        → NO se permite ninguna quita
-    //   60 a 89 días     → solo quita de intereses (sin tocar capital)
-    //   90 / 120 / 150 / 180 → quita de intereses + capital (20% / 30% / 40% / 50%)
-    //   TOPE MÁXIMO AUTORIZADO POR UALÁ: 50% de capital (+180 días). Antes era 70%.
-    const sinQuita = diasMora < 60;
-    let limiteUala = 0;
-    if (diasMora >= 180) limiteUala = 50;
-    else if (diasMora >= 150) limiteUala = 40;
-    else if (diasMora >= 120) limiteUala = 30;
-    else if (diasMora >= 90) limiteUala = 20;
-    // 60 a 89 días: limiteUala = 0 → solo quita de intereses
+    let y = 44;
+    y = bloqueCliente(doc, nombre, dni, y, textoProductosPDF(datos.tipo, datos.productos));
+    const totalConInteres = datos.totalConInteres;
+    const descuentoCapital = opcion.descuentoCapital;
+    const items = [
+        ["Tipo de acuerdo:", "Quita en cuotas"],
+        ["Saldo Total Actual:", formatoMonto(totalConInteres)],
+        ["Saldo capital:", formatoMonto(opcion.capital)],
+        ["Intereses condonados:", formatoMonto(opcion.interesesCondonados)],
+        ["Descuento sobre capital:", opcion.quita + "% (" + formatoMonto(descuentoCapital) + ")"],
+        ["Cantidad de cuotas:", opcion.cuotas + " cuotas"],
+        ["Valor de cuota:", formatoMonto(opcion.valorCuota)],
+        ["Vencimiento de la primera cuota:", datos.fechaVenc]
+    ];
 
-    const tablaBody = document.querySelector("#tablaQuitas tbody");
-    tablaBody.innerHTML = "";
-
-    // Base de ESTE cálculo, congelada acá y viajando en el ➕ de cada fila: `Propuestas.agregar`
-    // la compara contra la pantalla del momento del click. Sin esto, el ➕ tomaba el monto del
-    // cálculo viejo y el capital, el saldo, la mora y el tipo del DOM en vivo — y con la mora
-    // corregida a 50 sin recalcular, el mensaje salía diciendo "Días de mora: 50" y "66% de
-    // quita", cuando abajo de 60 días no hay ninguna quita autorizada.
-    const baseAttr = baseParaAtributo(baseDelCalculo());
-
-    const escalones = [0, 10, 20, 30, 40, 50];
-    let opcionesMostradas = 0;
-
-    escalones.forEach(porc => {
-        if (sinQuita) return; // menos de 60 días de mora: no se autoriza ninguna quita
-        if (porc === 0 || porc <= limiteUala) {
-            opcionesMostradas++;
-
-            const montoFinal = Math.ceil(capital * (1 - porc / 100));
-            const ahorroPesos = totalConInteres - montoFinal;
-            const porcRealTotal = Math.floor((ahorroPesos / totalConInteres) * 100);
-
-            const nombrePolitica = porc === 0 ? "Quita de Intereses" : "Quita Especial";
-            const labelQuita = porc === 0 ? "100% Intereses" : `100% Int. + ${porc}% Cap.`;
-
-            const fila = document.createElement("tr");
-            fila.innerHTML = `
-                <td>${nombrePolitica}</td>
-                <td><span style="color: #10b981; font-weight: bold;">${labelQuita}</span></td>
-                <td><strong>$${montoFinal.toLocaleString("es-AR")}</strong></td>
-                <td><button class="copiar-btn" onclick="copiarChatQuita(${montoFinal}, ${porcRealTotal}, this)">Copiar</button></td>
-                <td><button class="copiar-btn" style="background:rgba(56,189,248,0.15);" onclick="generarPDFQuita(${montoFinal}, ${porcRealTotal}, '${tipoSeleccionado}')">📄 PDF</button></td>
-                <td><button class="copiar-btn btn-agregar" onclick="Propuestas.agregar(${porc}, 1, ${montoFinal}, ${baseAttr})">➕</button></td>
-            `;
-            tablaBody.appendChild(fila);
-        }
+    const altoCondiciones = 68;
+    doc.setFillColor(30, 41, 59);
+    doc.roundedRect(M, y, W - M * 2, altoCondiciones, 3, 3, "F");
+    doc.setTextColor(220, 38, 38);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
+    doc.setFont("helvetica", "normal");
+    items.forEach(([label, valor], indice) => {
+        const ry = y + 17 + indice * 6;
+        doc.setTextColor(148, 163, 184);
+        doc.setFontSize(8.5);
+        doc.text(label, M + 6, ry);
+        doc.setTextColor(label === "Valor de cuota:" ? 34 : 248,
+            label === "Valor de cuota:" ? 197 : 250,
+            label === "Valor de cuota:" ? 94 : 252);
+        doc.setFont("helvetica", "bold");
+        doc.text(valor, M + 60, ry);
+        doc.setFont("helvetica", "normal");
     });
 
-    if (sinQuita) {
-        tablaBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">⛔ Con menos de 60 días de mora no hay quita autorizada. Gestionar pago del total: $${totalConInteres.toLocaleString("es-AR")}</td></tr>`;
-    } else if (opcionesMostradas === 0) {
-        tablaBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">Solo quita de intereses. Pago único sugerido: $${capital.toLocaleString("es-AR")}</td></tr>`;
-    }
-
-    document.getElementById("infoEscala").innerHTML = sinQuita
-        ? `<p>Sin quita autorizada para ${diasMora} días de mora (mínimo 60 días).</p>`
-        : `<p>Escala autorizada para ${diasMora} días de mora.</p>`;
-    document.getElementById("contenedorSalto").style.display = "block";
-    actualizarBotonRefinanciar();
+    y += altoCondiciones + 4;
+    y = bloquePago(doc, y, datos.tipo, true);
+    y = bloqueTerminos(doc, [
+        "1. Los pagos deben realizarse exclusivamente al CBU informado.",
+        "2. Es obligatorio enviar el comprobante para imputar cada pago.",
+        "3. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
+        "4. Libre deuda: Una vez abonada la última cuota, solicite el libre deuda a hola@Ualá.com.ar."
+    ], y);
+    bloqueFiremas(doc, y);
+    piePDF(doc, nroAcuerdo);
+    doc.save("Acuerdo_Quita_en_Cuotas_" + nombre.replace(/\s+/g, "_") + "_" + nroAcuerdo + ".pdf");
 }
 
-/** Habilita/deshabilita el botón "Refinanciar sobre Total" según el tipo de producto.
- *  Tarjeta de crédito NO admite plan de cuotas → botón bloqueado. */
-function actualizarBotonRefinanciar() {
-    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
-    const btn = document.getElementById("btnRefinanciar");
-    const texto = document.getElementById("textoSalto");
-    if (!btn || !texto) return;
-
-    if (tipo === "tarjeta") {
-        btn.disabled = true;
-        btn.style.opacity = "0.4";
-        btn.style.cursor = "not-allowed";
-        btn.title = "La tarjeta de crédito no admite plan de cuotas";
-        texto.innerHTML = '⚠️ La tarjeta de crédito <strong>no admite</strong> refinanciación en cuotas. Solo pago único con quita.';
-    } else {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
-        btn.title = "";
-        texto.innerHTML = "¿No acepta pago único?";
+/** Emite el PDF desde la misma foto completa que usan el carrito y el mensaje. */
+function generarPDFOpcion(opcionCompleta) {
+    if (!opcionCompleta) return;
+    switch (opcionCompleta.modalidad) {
+        case "pago_unico":
+            generarPDFQuita(
+                opcionCompleta.montoTotal,
+                opcionCompleta.quitaSobreTotal,
+                opcionCompleta.deuda,
+                opcionCompleta,
+                opcionCompleta
+            );
+            return;
+        case "cuotas_sin_quita":
+            generarPDFCuotas(opcionCompleta, opcionCompleta);
+            return;
+        case "quita_en_cuotas":
+            generarPDFQuitaEnCuotas(opcionCompleta, opcionCompleta);
+            return;
+        default:
+            alert("La opción ya no está disponible. Recalculá.");
     }
 }
 
-/** Borra la tabla de Quitas y deja un aviso escrito, igual que `vaciarGrillaCuotas`. */
-function vaciarTablaQuitas(mensaje) {
-    const cuerpo = document.querySelector("#tablaQuitas tbody");
-    if (cuerpo) {
-        cuerpo.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">${mensaje}</td></tr>`;
+/** 4. CAMPAÑA DE QUITAS **/
+function generarEscalaQuitas() {
+    recalcularNegociacion();
+}
+
+function contextoQuitasDelCalculo(datos) {
+    const input = document.getElementById("fechaVencInputQuita");
+    const vencimiento = input && input.value
+        ? new Date(input.value + "T12:00:00")
+        : new Date();
+    if (!(input && input.value)) vencimiento.setDate(vencimiento.getDate() + 2);
+    return Object.freeze({
+        capital: datos.capital,
+        totalConInteres: datos.totalConInteres,
+        diasMora: datos.diasMora,
+        fechaInicioMoraISO: datos.fechaInicioMoraISO,
+        tipo: datos.tipo,
+        nombre: datos.nombre,
+        dni: datos.dni,
+        productos: datos.productos,
+        fechaVenc: vencimiento.toLocaleDateString("es-AR", { day: "2-digit", month: "long", year: "numeric" }),
+        fechaVencISO: input && input.value ? input.value : isoFechaLocal(vencimiento),
+        diaVenc: vencimiento.getDate()
+    });
+}
+
+function formatoMonto(monto) {
+    return "$" + monto.toLocaleString("es-AR");
+}
+
+function textoSemaforo(opcion) {
+    return opcion.prioridad.charAt(0).toUpperCase() + opcion.prioridad.slice(1);
+}
+
+const CAMINOS_COMERCIALES = [
+    { modalidad: "pago_unico", titulo: "Cancelación en un pago" },
+    { modalidad: "cuotas_sin_quita", titulo: "Cuotas sin quita" },
+    { modalidad: "quita_en_cuotas", titulo: "Quita en cuotas" }
+];
+
+function modelosResumenComercial(resultados) {
+    const modelos = CAMINOS_COMERCIALES.map(({ modalidad, titulo }) => {
+        const resultado = resultados && resultados[modalidad === "pago_unico" ? "pagoUnico" : modalidad === "cuotas_sin_quita" ? "cuotas" : "quitaEnCuotas"];
+        return {
+            modalidad,
+            titulo,
+            resultado,
+            opcion: resultado ? PropuestaCore.mejorPorModalidad(resultado.opciones, modalidad) : null
+        };
+    });
+    const disponibles = modelos.filter((modelo) => modelo.opcion)
+        .slice()
+        .sort((a, b) => PropuestaCore.ordenarComercial(a.opcion, b.opcion));
+    const noDisponibles = modelos.filter((modelo) => !modelo.opcion);
+    return disponibles.concat(noDisponibles);
+}
+
+function renderResumenes(resultados) {
+    document.querySelectorAll("[data-resumen-caminos]").forEach((contenedor) => {
+        contenedor.innerHTML = "";
+        modelosResumenComercial(resultados).forEach(({ modalidad, titulo, resultado, opcion }) => {
+            const tarjeta = document.createElement("button");
+            tarjeta.type = "button";
+            tarjeta.className = `tarjeta-camino ${opcion ? `prioridad-${opcion.prioridad}` : "tarjeta-camino-inactiva"}`;
+            tarjeta.dataset.modalidad = modalidad;
+
+            if (!opcion) {
+                tarjeta.disabled = true;
+                tarjeta.innerHTML = `<strong>${titulo}</strong><span class="etiqueta-prioridad">No disponible</span><span>${resultado ? resultado.motivo : "Calculá las opciones para ver este camino."}</span>`;
+            } else {
+                tarjeta.innerHTML = `<strong>${titulo}</strong><span class="etiqueta-prioridad">Prioridad ${textoSemaforo(opcion)}</span>` +
+                    `<span>${opcion.motivoPrioridad}</span>` +
+                    `<span>Cobro inicial: ${formatoMonto(opcion.cobroInicial)}</span>` +
+                    `<span>Total recuperado: ${formatoMonto(opcion.montoTotal)}</span>` +
+                    `<span>${opcion.cuotas === 1 ? "1 pago" : `${opcion.cuotas} pagos`}</span>`;
+                tarjeta.addEventListener("click", () => navegarAModalidad(modalidad));
+            }
+            contenedor.appendChild(tarjeta);
+        });
+    });
+}
+
+function detalleQuita(opcion) {
+    if (opcion.esPagoTotal) {
+        return `<strong>Cancelación total sin quita</strong><br>` +
+            `<small>Sin condonación de intereses ni descuento de capital.</small>`;
     }
-    const info = document.getElementById("infoEscala");
-    if (info) info.innerHTML = "";
+    const etiqueta = opcion.quita === 0
+        ? "Quita sólo de intereses"
+        : `100% de intereses + ${opcion.quita}% sobre capital`;
+    return `<strong>${etiqueta}</strong><br>` +
+        `<small>Intereses condonados: ${formatoMonto(opcion.interesesCondonados)}<br>` +
+        `Descuento de capital: ${opcion.quita}% (${formatoMonto(opcion.descuentoCapital)})</small>`;
+}
+
+function botonesOfertaQuita(id) {
+    return `<button class="copiar-btn" onclick="copiarChatQuita('${id}', this)">💬 Copiar</button> ` +
+        `<button class="copiar-btn" onclick="generarPDFQuitaDesdeOferta('${id}')">📄 PDF</button> ` +
+        `<button class="copiar-btn btn-agregar" onclick="agregarOfertaQuita('${id}')">➕ Sumar</button>`;
+}
+
+function renderPagoUnico(opciones) {
+    const cuerpo = document.querySelector("#tablaPagoUnico tbody");
+    if (!cuerpo) return;
+    cuerpo.innerHTML = "";
+    opciones.forEach((opcion) => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `<td><strong class="prioridad-${opcion.prioridad}" title="${opcion.motivoPrioridad}">${textoSemaforo(opcion)}</strong><br><small>${opcion.motivoPrioridad}</small></td>` +
+            `<td>${detalleQuita(opcion)}</td>` +
+            `<td><strong>${formatoMonto(opcion.montoTotal)}</strong><br><small>Total efectivo</small></td>` +
+            `<td>${botonesOfertaQuita(opcion.id)}</td>`;
+        cuerpo.appendChild(fila);
+    });
+}
+
+function renderQuitaEnCuotas(opciones) {
+    const cuerpo = document.querySelector("#tablaQuitaEnCuotas tbody");
+    if (!cuerpo) return;
+    cuerpo.innerHTML = "";
+    opciones.forEach((opcion) => {
+        const fila = document.createElement("tr");
+        fila.innerHTML = `<td><strong class="prioridad-${opcion.prioridad}" title="${opcion.motivoPrioridad}">${textoSemaforo(opcion)}</strong><br><small>${opcion.motivoPrioridad}</small></td>` +
+            `<td><strong>${opcion.cuotas} cuotas</strong><br>${detalleQuita(opcion)}</td>` +
+            `<td>${opcion.cuotas} × <strong>${formatoMonto(opcion.valorCuota)}</strong></td>` +
+            `<td><strong>${formatoMonto(opcion.montoTotal)}</strong></td>` +
+            `<td>${botonesOfertaQuita(opcion.id)}</td>`;
+        cuerpo.appendChild(fila);
+    });
+}
+
+function ofertaQuitaActual(id) {
+    const opcion = estadoOfertas.pagoUnico.get(id) || estadoOfertas.quitaEnCuotas.get(id);
+    const contexto = contextoQuitas.get(id);
+    if (opcion && contexto) return { opcion, contexto };
+    mostrarEstadoOfertas("estadoPagoUnico", false, "Recalculá las opciones con los datos actuales.");
+    mostrarEstadoOfertas("estadoQuitaEnCuotas", false, "Recalculá las opciones con los datos actuales.");
+    return null;
+}
+
+function copiarChatQuita(id, btn) {
+    const oferta = ofertaQuitaActual(id);
+    if (!oferta) return;
+    const { opcion, contexto } = oferta;
+    const foto = opcionCompleta(opcion, contexto);
+    if (!foto.fechaInicioMoraISO) {
+        alert("⚠️ Completá la fecha de inicio de mora de Emerix y recalculá las opciones antes de copiar el mensaje.");
+        return;
+    }
+    const mensaje = PropuestaCore.armarMensaje([foto], { nombre: foto.nombre, dni: foto.dni }, { operador: nombreOperador() });
+    navigator.clipboard.writeText(mensaje).then(() => {
+        const original = btn.innerText;
+        btn.innerText = "¡Copiado!";
+        setTimeout(() => { btn.innerText = original; }, 1000);
+    });
+}
+
+function generarPDFQuitaDesdeOferta(id) {
+    const oferta = ofertaQuitaActual(id);
+    if (!oferta) return;
+    const { opcion, contexto } = oferta;
+    generarPDFOpcion(opcionCompleta(opcion, contexto));
+}
+
+function agregarOfertaQuita(id) {
+    const oferta = ofertaQuitaActual(id);
+    if (!oferta) return;
+    const { opcion, contexto } = oferta;
+    Propuestas.agregarOpcion(opcionCompleta(opcion, contexto));
 }
 
 const AVISO_CAMBIO_TIPO =
     "Cambiaste el tipo de producto. Volvé a calcular para ver las opciones que corresponden.";
 
-/**
- * El operador cambió el tipo de producto: las dos tablas quedan sin valor y se vacían.
- *
- * Cambiar el selector NO recalculaba nada, así que las tablas dibujadas seguían en pantalla
- * y seguían siendo clickeables con el tipo VIEJO horneado adentro, mientras el ➕ y el botón
- * Copiar leen el tipo en vivo. Los dos agujeros que cierra:
- *
- *  - Calcular la grilla de Cuotas como préstamo, pasar el selector a tarjeta y volver a
- *    Cuotas: la grilla del préstamo seguía ahí y sumaba al carrito una TARJETA CON CUOTAS,
- *    que la política prohíbe. Peor: `generarPDF` la manda a `generarPDFCuotas`, que hornea
- *    `bloquePago(doc, y, "prestamo", false)`, así que el acuerdo de tarjeta salía con el
- *    CBU de préstamos.
- *  - En una fila de Quitas el PDF lleva el tipo horneado en el `onclick` al calcular, y
- *    Copiar y ➕ lo leen en vivo: los tres botones de la misma fila podían discrepar.
- */
 function cambiarTipoProducto() {
-    actualizarBotonRefinanciar();
-    vaciarGrillaCuotas(AVISO_CAMBIO_TIPO);
-    vaciarTablaQuitas(AVISO_CAMBIO_TIPO);
-}
-
-/**
- * Foto de la base con la que se calculó una tabla: capital, saldo total, mora y tipo.
- *
- * Se lee con `Propuestas.leerDeuda()` —el MISMO lector que va a usar `Propuestas.agregar`
- * al comparar— para que la comparación no pueda fallar por una diferencia de parseo entre
- * las dos solapas, sino solo porque el operador efectivamente cambió un dato.
- *
- * El titular y las cantidades de productos quedan afuera a propósito: no entran en el
- * cálculo del monto y ya tienen sus propios guards en `propuestas.js`.
- */
-function baseDelCalculo() {
-    const d = Propuestas.leerDeuda();
-    return {
-        capital: d.capital,
-        totalConInteres: d.totalConInteres,
-        diasMora: d.diasMora,
-        tipo: d.tipo,
-    };
-}
-
-/**
- * La base, lista para meter dentro de un `onclick=""` del HTML.
- *
- * Las comillas del JSON se escapan como `&quot;`: el navegador decodifica las entidades del
- * atributo ANTES de parsear el JS, así que el handler recibe un objeto literal bien formado
- * sin romper el atributo. Adentro solo hay números y el tipo ("prestamo"/"tarjeta").
- */
-function baseParaAtributo(base) {
-    return JSON.stringify(base).replace(/"/g, "&quot;");
-}
-
-function copiarChatQuita(monto, porcReal, btn) {
-    // Sin relleno tipo "Titular" para el nombre vacío: `PropuestaCore.presentacion`
-    // ya redacta el saludo sin él, igual que en el mensaje del carrito.
-    const nombre = (document.getElementById("nombreInput")?.value || "").trim();
-
-    // Tomamos los inputs originales para mostrar el detalle completo
-    const totalInputVal = document.getElementById("totalConInteresInput")?.value || "0";
-    const capInputVal = document.getElementById("capitalInput")?.value || "0";
-    const totalOriginal = parseFloat(totalInputVal.replace(/\./g, "").replace(",", ".")) || 0;
-    const saldoCapital = parseFloat(capInputVal.replace(/\./g, "").replace(",", ".")) || 0;
-
-    // El % sobre CAPITAL no se calcula acá: es el número interno que manda en los topes y
-    // nunca puede salir al deudor. Este mensaje comunica siempre `porcReal`, el % sobre el
-    // saldo total, igual que el PDF y que el mensaje del carrito.
-
-    // Tipo de producto: préstamo o tarjeta
-    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
-
-    // Días de mora y fecha de vencimiento elegida por el operador
-    const diasMora = parseInt(document.getElementById("moraInput")?.value) || 0;
-    const fechaVenc = obtenerFechaVenc("fechaVencInputQuita");
-
-    // ─── Datos de pago según producto ───────────────────────────────────────
-    // Todo lo que pasa por la solapa Quitas (incluida quita solo de intereses)
-    // usa la cuenta CON quita. La cuenta SIN quita solo se aplica desde el Manual.
-    const datosPago = obtenerDatosCuentaTexto(tipo, true);
-
-    const disclaimer = tipo === "tarjeta"
-        ? "⚠️ Este beneficio aplica a tu deuda de TARJETA DE CRÉDITO."
-        : "⚠️ Este beneficio aplica exclusivamente a PRÉSTAMOS y CUOTIFICACIONES (tarjeta de credito, en caso de poseer, esta excluido).";
-
-    // Mismo saludo que el mensaje del carrito, incluido el caso del operador sin cargar.
-    const saludo = PropuestaCore.presentacion(nombre, nombreOperador());
-
-    const mensaje = `${saludo} Logré gestionarte un beneficio del ${porcReal}% de quita sobre el saldo total adeudado, para que puedas regularizar tu situación.
-
-📋 Detalle de la propuesta:
-• Saldo total adeudado (con intereses): $${totalOriginal.toLocaleString("es-AR")}
-• Saldo capital: $${saldoCapital.toLocaleString("es-AR")}
-• Días de mora: ${diasMora}
-• Quita aplicada: ${porcReal}% sobre el saldo total
-• Monto final a cancelar: $${monto.toLocaleString("es-AR")}
-
-⏰ Tenés tiempo de confirmar y abonar hasta el ${fechaVenc} para conservar el beneficio. Pasada esa fecha, la oferta caduca automáticamente y vuelve a la deuda original informada.
-
-${disclaimer}
-
-💳 El pago se realiza únicamente por transferencia a la cuenta oficial de Ualá:
-${datosPago}
-
-Importante: avisame antes de pagar y mandame el comprobante por esta vía. A las 72 hs hábiles vas a ver el pago reflejado en la app.
-Durante ese período no tenés que utilizar la cuenta.
-
-Quedo a disposición.`;
-
-    navigator.clipboard.writeText(mensaje).then(() => {
-        const original = btn.innerText;
-        btn.innerText = "¡Copiado!";
-        setTimeout(() => btn.innerText = original, 1000);
-    });
-}
-
-function saltarACuotas() {
-    // Red de seguridad: la tarjeta de crédito no admite plan de cuotas
-    const tipo = document.getElementById("tipoProductoQuita")?.value || "prestamo";
-    if (tipo === "tarjeta") {
-        alert("La tarjeta de crédito no admite refinanciación en cuotas. Solo se puede ofrecer pago único con quita.");
-        return;
+    const tipoQuita = document.getElementById("tipoProductoQuita");
+    const tipoCuotas = document.getElementById("tipoProductoCuotas");
+    if (tipoQuita && tipoCuotas) {
+        const origen = document.activeElement;
+        if (origen === tipoCuotas) tipoQuita.value = tipoCuotas.value;
+        else tipoCuotas.value = tipoQuita.value;
     }
-
-    // Validación: mínimo 90 días de mora para cuotas
-    const diasMoraSaltar = parseInt(document.getElementById("moraInput")?.value) || 0;
-    if (diasMoraSaltar < 90) {
-        const msg = diasMoraSaltar > 0
-            ? `⚠️ Este caso tiene ${diasMoraSaltar} días de mora. Las cuotas solo se pueden ofrecer a partir de los 90 días de mora.\n\nEsperá hasta cumplir los 90 días para evitar reformulaciones por intereses generados.`
-            : `⚠️ Ingresá los días de mora antes de pasar a cuotas.\n\nLas cuotas solo se pueden ofrecer a partir de los 90 días de mora.`;
-        alert(msg);
-        return;
-    }
-    // Sincronizar días de mora al campo de cuotas para que la validación allá también funcione
-    const moraInputCuotas = document.getElementById("moraInputCuotas");
-    if (moraInputCuotas) moraInputCuotas.value = diasMoraSaltar;
-
-    const totalCargado = document.getElementById("totalConInteresInput").value;
-    if (!totalCargado) {
-        alert("Por favor, cargue el Saldo Total antes de refinanciar.");
-        return;
-    }
-    document.getElementById("saldoInput").value = totalCargado;
-    activarSeccion('cuotas');
-    calcularCuotas();
+    invalidarNegociacion(AVISO_CAMBIO_TIPO);
 }
 
 /** 5. DATOS DE PAGO **/
@@ -1069,12 +1021,16 @@ function copiarTodoPago() {
     });
 }
 
-/** `datos` es opcional: es una foto del carrito. Sin él lee del DOM, igual que siempre. */
-function generarPDFCuotas(numCuotas, valorCuota, datos) {
+/** Recibe una opción canónica y su contexto congelado desde Cuotas. */
+function generarPDFCuotas(opcionOcuotas, contextoOValor, datosLegado) {
+    const opcion = typeof opcionOcuotas === "object" ? opcionOcuotas : null;
+    const numCuotas = opcion ? opcion.cuotas : opcionOcuotas;
+    const valorCuota = opcion ? opcion.valorCuota : contextoOValor;
+    const datos = opcion ? contextoOValor : datosLegado;
     const nombre = datos ? datos.nombre : (document.getElementById("nombreCuotaInput")?.value || "CLIENTE");
     const dni    = datos ? datos.dni    : (document.getElementById("dniCuotaInput")?.value || "---");
     const saldoTotal = datos
-        ? datos.saldoTotal
+        ? (datos.saldoTotal ?? (opcion && opcion.saldoTotal))
         : (parseFloat((document.getElementById("saldoInput").value || "0").replace(/\./g, "").replace(",", ".")) || 0);
 
     const { jsPDF } = window.jspdf;
@@ -1082,19 +1038,21 @@ function generarPDFCuotas(numCuotas, valorCuota, datos) {
     const W = 210, M = 20;
     
     // Encabezado
-    encabezadoPDF(doc, "ACUERDO DE REFINANCIACIÓN EN CUOTAS");
+    encabezadoPDF(
+        doc,
+        opcion && opcion.modalidad === "cuotas_sin_quita"
+            ? "ACUERDO DE PAGO EN CUOTAS SIN QUITA"
+            : "ACUERDO DE REFINANCIACIÓN EN CUOTAS"
+    );
     const nroAcuerdo = "ACU-" + new Date().getFullYear() + "-" + Math.floor(Math.random()*90000+10000);
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.text("N° " + nroAcuerdo, 190, 30, { align: "right" });
 
-    // La grilla nueva permite planes CON quita: lo que el deudor termina pagando es la suma
-    // de las cuotas y puede ser menor al saldo total. Sin decirlo, el documento muestra un
-    // saldo y un valor de cuota que no cierran entre sí. El saldo sale de la foto del carrito
-    // (`datos`) si vino, y de `saldoInput` si el plan es suelto; el total a abonar, siempre de
-    // los parámetros del plan. Sin quita el acuerdo sale exactamente igual que siempre.
-    const totalAAbonar = numCuotas * valorCuota;
+    // La foto canónica fija el total efectivo; la firma numérica existente conserva el cálculo
+    // para documentos ajenos a estas ofertas. Así cada documento muestra cifras que cierran.
+    const totalAAbonar = opcion ? opcion.montoTotal : numCuotas * valorCuota;
     // Porcentaje sobre el SALDO TOTAL, el único que ve el deudor (el de capital es interno).
     // Se calcula contra `totalAAbonar` —la misma suma de cuotas que figura en el recuadro—
     // para que las tres cifras cierren entre sí.
@@ -1116,7 +1074,7 @@ function generarPDFCuotas(numCuotas, valorCuota, datos) {
     // "Quita aplicada: 30% sobre el saldo total": el acuerdo firmado no registraba el
     // beneficio y sus propias cifras no cerraban. Sin `datos`, `saldoTotal` sale de
     // `saldoInput` —espejado con `totalConInteresInput`—, así que `porcQuita` se calcula bien.
-    const hayQuita = porcQuita > 0;
+    const hayQuita = opcion ? opcion.modalidad === "quita_en_cuotas" : porcQuita > 0;
 
     // Geometría: con quita el recuadro de condiciones lleva 2 ítems más (12 mm) y hay que
     // devolverlos para que el bloque de firmas no se caiga de la hoja. Se sacan de fondo
@@ -1238,13 +1196,11 @@ function generarPDFCuotas(numCuotas, valorCuota, datos) {
     if (hayQuita) y -= 3;
 
     const clausulas = [
-        "1. El atraso en el pago de cualquier cuota anulará el beneficio.",
-        "2. Los pagos deben realizarse exclusivamente al CBU informado.",
-        "3. Es obligatorio enviar el comprobante para imputar el pago.",
-        "4. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
-        "5. Este documento es una propuesta de pago sujeta a aprobación final.",
-        "6. Libre deuda: Una vez abonada la ultima cuota, solicite el libre deuda a hola@Ualá.com.ar",
-        "7. El incumplimiento del pago acordado deja sin efecto el beneficio otorgado y habilita la derivación del caso a instancias de gestión de mayor severidad."
+        "1. Los pagos deben realizarse exclusivamente al CBU informado.",
+        "2. Es obligatorio enviar el comprobante para imputar el pago.",
+        "3. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
+        "4. Este documento es una propuesta de pago sujeta a aprobación final.",
+        "5. Libre deuda: Una vez abonada la ultima cuota, solicite el libre deuda a hola@Ualá.com.ar"
     ];
     y = bloqueTerminos(doc, clausulas, y);
     // Mismo criterio que arriba: con quita la separación entre términos y firmas pasa de
@@ -1255,6 +1211,22 @@ function generarPDFCuotas(numCuotas, valorCuota, datos) {
 
     doc.save(`Plan_Cuotas_${nombre.replace(/\s+/g, "_")}.pdf`);
 }
+/** Busca la foto de pago único autorizada para el importe manual, sin recalcular topes en el DOM. */
+function opcionManualAutorizada(datos, montoPagar) {
+    const tope = PropuestaCore.topeQuitaPorMora(datos.diasMora);
+    if (datos.tipo === "tarjeta") {
+        return { ok: false, motivo: "Tarjeta de crédito no admite estas ofertas." };
+    }
+    if (tope === null) {
+        return { ok: false, motivo: "Cancelación con quita disponible desde 30 días de mora." };
+    }
+    const opcion = PropuestaCore.opcionesQuita(datos).pagoUnico.opciones
+        .find((candidata) => candidata.montoTotal === montoPagar);
+    return opcion
+        ? { ok: true, opcion }
+        : { ok: false, motivo: "El monto debe coincidir con una opción de pago único autorizada." };
+}
+
 // ==========================================
 // 5. GENERACIÓN PDF MANUAL (FORMATO UNIFICADO)
 // ==========================================
@@ -1289,32 +1261,22 @@ function generarPDFPuroManual() {
 
     const saldoTotal = limpiarPlata(saldoTotalStr);
     const capital = limpiarPlata(capitalStr);
-    const montoPagar = limpiarPlata(pagoStr);
+    const montoIngresado = limpiarPlata(pagoStr);
     const mora = parseInt(moraStr.replace(/[^0-9]/g, "")); 
     
-    if (isNaN(saldoTotal) || isNaN(capital) || isNaN(montoPagar) || isNaN(mora)) {
+    if (isNaN(saldoTotal) || isNaN(capital) || isNaN(montoIngresado) || isNaN(mora)) {
         alert("⚠️ Verificá que los montos y la mora sean números válidos (no uses letras).");
         return;
     }
 
-    // 3. Lógica de validación de políticas
-    let quitaCapitalMax = 0;
-    if (mora >= 180) quitaCapitalMax = 0.50;
-    else if (mora >= 150) quitaCapitalMax = 0.40;
-    else if (mora >= 120) quitaCapitalMax = 0.30;
-    else if (mora >= 90) quitaCapitalMax = 0.20;
-    else if (mora >= 30) quitaCapitalMax = 0.00;
-
-    let pagoMinimoRequerido = capital * (1 - quitaCapitalMax);
-    if (mora < 30) pagoMinimoRequerido = saldoTotal;
-
-    if (montoPagar < pagoMinimoRequerido) {
-        alert(`❌ ERROR: El monto no cumple las políticas.\n\nPara ${mora} días de mora, el PAGO MÍNIMO permitido es de: $${pagoMinimoRequerido.toLocaleString("es-AR", {minimumFractionDigits: 2, maximumFractionDigits: 2})}\n\n(No podés cobrar menos que eso).`);
+    const autorizacion = opcionManualAutorizada({ saldoTotal, capital, diasMora: mora, tipo }, montoIngresado);
+    if (!autorizacion.ok) {
+        alert("❌ ERROR: " + autorizacion.motivo);
         return;
     }
 
-    const ahorro = saldoTotal - montoPagar;
-    const porcReal = Math.floor((ahorro / saldoTotal) * 100);
+    const opcion = autorizacion.opcion;
+    const formatoManual = (monto) => `$${monto.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
     
     // Fecha de vencimiento
     let fechaVencInput = document.getElementById("fechaVencManualInput");
@@ -1335,7 +1297,7 @@ function generarPDFPuroManual() {
     const W = 210, M = 20;
     
     // Encabezado global
-    const tituloDoc = tipo === "tarjeta" ? "PROPUESTA DE PAGO ÚNICO — TARJETA" : "PROPUESTA DE PAGO ÚNICO — PRÉSTAMO";
+    const tituloDoc = "PROPUESTA DE PAGO ÚNICO — PRÉSTAMO";
     if (typeof encabezadoPDF === "function") {
         encabezadoPDF(doc, tituloDoc);
     }
@@ -1366,25 +1328,24 @@ function generarPDFPuroManual() {
 
     // Bloque Condiciones
     doc.setFillColor(30, 41, 59);
-    doc.roundedRect(M, y, W - M * 2, 56, 3, 3, "F");
+    doc.roundedRect(M, y, W - M * 2, 58, 3, 3, "F");
     doc.setTextColor(56, 189, 248);
     doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
 
-    const tipoDesc = tipo === "tarjeta"
-        ? "Cancelación de deuda de Tarjeta de Crédito"
-        : "Cancelación total con descuento por pago único (Préstamo)";
+    const tipoDesc = "Cancelación con quita";
 
     const items = [
         ["Tipo:", tipoDesc],
-        ["Saldo Total Actual:", `$${saldoTotal.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
-        ["Importe descontado:", `$${ahorro.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
-        ["Monto final a abonar:", `$${montoPagar.toLocaleString("es-AR", {minimumFractionDigits: 2})}`],
-        ["Descuento aplicado:", `${porcReal}% sobre el saldo total`],
+        ["Saldo Total Actual:", formatoManual(opcion.saldoTotal)],
+        ["Saldo capital:", formatoManual(opcion.capital)],
+        ["Intereses condonados:", formatoManual(opcion.interesesCondonados)],
+        ["Descuento sobre capital:", `${opcion.quita}% (${formatoManual(opcion.descuentoCapital)})`],
+        ["Monto final a abonar:", formatoManual(opcion.montoTotal)],
         ["Vencimiento:", fechaTexto]
     ];
 
     items.forEach(([label, val], i) => {
-        const ry = y + 17 + i * 7;
+        const ry = y + 17 + i * 6;
         
         // Etiqueta en gris
         doc.setTextColor(148, 163, 184);
@@ -1396,7 +1357,7 @@ function generarPDFPuroManual() {
         
         if (label === "Monto final a abonar:" || label === "Vencimiento:") {
             color = [34, 197, 94]; // VERDE
-        } else if (label === "Bonificación a favor:" || label === "Descuento aplicado:") {
+        } else if (label === "Descuento sobre capital:") {
             color = [245, 158, 11]; // AMARILLO/NARANJA
         }
 
@@ -1405,19 +1366,17 @@ function generarPDFPuroManual() {
         doc.text(val, M + 60, ry);
     });
 
-    y += 60;   // recuadro de 56 + 4 de separación
+    y += 62;   // recuadro de 58 + 4 de separación
 
     // ¿Hay quita?
     // - Monto a cancelar IGUAL al Saldo Total Actual (con intereses) → SIN quita (pago completo).
     // - Monto a cancelar MENOR que el Saldo Total Actual → CON quita (hubo descuento).
-    const conQuita = montoPagar < saldoTotal;
+    const conQuita = opcion.montoTotal < opcion.saldoTotal;
 
     // Llamada a los bloques comunes con tipo de producto + flag de quita
     y = bloquePago(doc, y, tipo, conQuita); 
 
-    const clausula4 = tipo === "tarjeta"
-        ? "4. La rehabilitación de la tarjeta solo ocurre si el pago se realiza antes de los 30 días de atraso. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta."
-        : "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones (tarjeta de crédito, en caso de poseer, está excluida). Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
+    const clausula4 = "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones (tarjeta de crédito, en caso de poseer, está excluida). Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
 
     const clausulas = [
         "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
@@ -1425,10 +1384,7 @@ function generarPDFPuroManual() {
         "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
         clausula4,
         "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar",
-        // Texto legal: copiado palabra por palabra de los otros dos PDF. Es la misma
-        // política para los tres documentos, no se reescribe acá.
-        "7. El incumplimiento del pago acordado deja sin efecto el beneficio otorgado y habilita la derivación del caso a instancias de gestión de mayor severidad."
+        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
     ];
     y = bloqueTerminos(doc, clausulas, y);
     bloqueFiremas(doc, y);

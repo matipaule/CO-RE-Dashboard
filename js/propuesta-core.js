@@ -5,14 +5,19 @@
  */
 window.PropuestaCore = (function () {
 
-  /** Tope de quita sobre capital según días de mora. Ya vigente en script.js:500. */
+  /** Tope de quita sobre capital según días de mora, según onboarding. */
   const TRAMOS_MORA = [
     { dias: 180, tope: 50 },
     { dias: 150, tope: 40 },
     { dias: 120, tope: 30 },
-    { dias: 90,  tope: 20 },
-    { dias: 60,  tope: 0  },  // solo quita de intereses
+    { dias: 90, tope: 20 },
+    { dias: 30, tope: 0 }
   ];
+
+  const PLANES_QUITA_EN_CUOTAS = Object.freeze([
+    Object.freeze({ quita: 50, cuotas: 3 }),
+    Object.freeze({ quita: 40, cuotas: 6 })
+  ]);
 
   /** @returns {number|null} null = ninguna quita autorizada */
   function topeQuitaPorMora(diasMora) {
@@ -22,36 +27,82 @@ window.PropuestaCore = (function () {
     return null;
   }
 
-  /**
-   * Tope de quita según la cantidad de cuotas: a más cuotas, menos quita.
-   * Es lo que sostiene la invariante del menú (más cuotas ⇒ paga más total).
-   * El máximo de cuotas ofrecido alguna vez fueron 18, con permiso del banco.
-   */
-  function topeQuitaPorCuotas(cuotas) {
-    if (cuotas <= 1) return 50;
-    if (cuotas <= 3) return 30;
-    if (cuotas <= 6) return 20;
-    return 10;
+  function maxCuotasPorSaldo(saldoTotal) {
+    if (saldoTotal <= 1000000) return 12;
+    if (saldoTotal <= 6000000) return 15;
+    if (saldoTotal <= 20000000) return 18;
+    return 36;
   }
 
-  /**
-   * Mora mínima para combinar quita de capital CON un plan de cuotas.
-   *
-   * Es una regla distinta de `topeQuitaPorMora`: esa manda en el pago único de la solapa
-   * Quitas, donde desde los 90 días ya hay 20/30/40% de capital. Acá se cruzan las dos
-   * cosas, y el banco autoriza quita de capital en cuotas solo desde los 180 días. Entre
-   * 90 y 179 el plan en cuotas se ofrece sin intereses y sin tocar el capital.
-   */
-  const MORA_MIN_QUITA_EN_CUOTAS = 180;
+  function prioridadPara(modalidad, quita) {
+    if (modalidad === "quita_en_cuotas") return { prioridad: "rojo", motivoPrioridad: "Último recurso: combina quita de capital y financiación." };
+    if (modalidad === "cuotas_sin_quita") return { prioridad: "amarillo", motivoPrioridad: "Recupera el saldo total, pero difiere el cobro." };
+    if (quita <= 10) return { prioridad: "verde", motivoPrioridad: "Prioriza una cancelación inmediata con baja concesión." };
+    if (quita <= 40) return { prioridad: "amarillo", motivoPrioridad: "Cancelación inmediata con una concesión intermedia." };
+    return { prioridad: "rojo", motivoPrioridad: "Último recurso: aplica la quita máxima autorizada." };
+  }
 
-  /** Los dos topes se cruzan: vale el menor. @returns {number|null} */
-  function quitaMaxima(diasMora, cuotas) {
-    const porMora = topeQuitaPorMora(diasMora);
-    if (porMora === null) return null;
-    // El pago único (`cuotas === 1`) no es un plan de cuotas y no entra en la restricción:
-    // lo que sale por la solapa Quitas sigue rigiéndose solo por el tope de mora.
-    if (cuotas > 1 && diasMora < MORA_MIN_QUITA_EN_CUOTAS) return 0;
-    return Math.min(porMora, topeQuitaPorCuotas(cuotas));
+  function crearOpcion({ modalidad, quita, cuotas, saldoTotal, capital, esPagoTotal = false }) {
+    const totalObjetivo = esPagoTotal || modalidad === "cuotas_sin_quita"
+      ? Math.round(saldoTotal)
+      : Math.round(capital * (1 - quita / 100));
+    const valorCuota = Math.ceil(totalObjetivo / cuotas);
+    const montoTotal = valorCuota * cuotas;
+    const prioridad = esPagoTotal
+      ? { prioridad: "verde", motivoPrioridad: "Prioriza la cancelación total inmediata, sin quita." }
+      : prioridadPara(modalidad, quita);
+    return Object.freeze({
+      id: `${modalidad}-${esPagoTotal ? "total" : quita}-${cuotas}`, modalidad, quita,
+      esPagoTotal,
+      quitaSobreTotal: Math.round((1 - montoTotal / saldoTotal) * 100), cuotas,
+      saldoTotal, capital,
+      interesesCondonados: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : Math.max(0, saldoTotal - capital),
+      descuentoCapital: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : capital - totalObjetivo,
+      totalObjetivo, valorCuota, montoTotal, cobroInicial: valorCuota,
+      recuperacionSobreTotal: montoTotal / saldoTotal * 100,
+      prioridad: prioridad.prioridad, motivoPrioridad: prioridad.motivoPrioridad
+    });
+  }
+
+  function ordenarComercial(a, b) {
+    return b.cobroInicial - a.cobroInicial || a.cuotas - b.cuotas || b.montoTotal - a.montoTotal;
+  }
+
+  /** Devuelve la mejor oferta de una modalidad sin reordenar la colección de origen. */
+  function mejorPorModalidad(opciones, modalidad) {
+    const candidatas = (Array.isArray(opciones) ? opciones : [])
+      .filter((opcion) => opcion.modalidad === modalidad)
+      .slice()
+      .sort(ordenarComercial);
+    return candidatas[0] || null;
+  }
+
+  function datosEconomicosValidos(datos) {
+    return Number.isFinite(datos.saldoTotal) && datos.saldoTotal > 0 && Number.isFinite(datos.capital) && datos.capital > 0 && datos.capital <= datos.saldoTotal && Number.isFinite(datos.diasMora) && datos.diasMora >= 0;
+  }
+
+  function opcionesCuotas(datos) {
+    if (!datosEconomicosValidos(datos)) return { disponible: false, motivo: "Revisá saldo total, capital y días de mora.", opciones: [] };
+    if (datos.tipo === "tarjeta") return { disponible: false, motivo: "Tarjeta de crédito no admite Acuerdos de Pago.", opciones: [] };
+    if (datos.diasMora < 90) return { disponible: false, motivo: "Acuerdo de Pago disponible desde 90 días de mora.", opciones: [] };
+    const maximo = maxCuotasPorSaldo(datos.saldoTotal);
+    const opciones = Array.from({ length: maximo - 1 }, (_, indice) => indice + 2).map((cuotas) => crearOpcion({ modalidad: "cuotas_sin_quita", quita: 0, cuotas, saldoTotal: datos.saldoTotal, capital: datos.capital })).sort(ordenarComercial);
+    return { disponible: true, motivo: "", opciones };
+  }
+
+  function opcionesQuita(datos) {
+    const vacio = (motivo) => ({ pagoUnico: { disponible: false, motivo, opciones: [] }, quitaEnCuotas: { disponible: false, motivo, opciones: [] } });
+    if (!datosEconomicosValidos(datos)) return vacio("Revisá saldo total, capital y días de mora.");
+    if (datos.tipo === "tarjeta") return vacio("Tarjeta de crédito no admite quitas ni quita en cuotas.");
+    const tope = topeQuitaPorMora(datos.diasMora);
+    const pagoTotal = crearOpcion({ modalidad: "pago_unico", quita: 0, cuotas: 1, saldoTotal: datos.saldoTotal, capital: datos.capital, esPagoTotal: true });
+    const cancelacionesConQuita = tope === null
+      ? []
+      : Array.from({ length: tope / 10 + 1 }, (_, indice) => indice * 10)
+        .map((quita) => crearOpcion({ modalidad: "pago_unico", quita, cuotas: 1, saldoTotal: datos.saldoTotal, capital: datos.capital }));
+    const pagoUnico = { disponible: true, motivo: "", opciones: [pagoTotal, ...cancelacionesConQuita].sort(ordenarComercial) };
+    const quitaEnCuotas = datos.diasMora >= 180 ? { disponible: true, motivo: "", opciones: PLANES_QUITA_EN_CUOTAS.map((plan) => crearOpcion({ modalidad: "quita_en_cuotas", quita: plan.quita, cuotas: plan.cuotas, saldoTotal: datos.saldoTotal, capital: datos.capital })).sort(ordenarComercial) } : { disponible: false, motivo: "Quita en cuotas disponible desde 180 días de mora.", opciones: [] };
+    return { pagoUnico, quitaEnCuotas };
   }
 
   const MAX_POR_DEUDA = 3;
@@ -67,13 +118,42 @@ window.PropuestaCore = (function () {
   function validarAgregado(opciones, candidata) {
     const mismaDeuda = opciones.filter((o) => o.deuda === candidata.deuda);
 
+    if (candidata.deuda === "tarjeta") {
+      return { ok: false, motivo: "Tarjeta de crédito no admite estas ofertas." };
+    }
+
     if (mismaDeuda.length >= MAX_POR_DEUDA) {
       return { ok: false, motivo: `Ya hay ${MAX_POR_DEUDA} opciones para esta deuda. Quitá una antes de agregar otra.` };
     }
 
-    for (let i = 0; i < mismaDeuda.length; i++) {
-      if (mismaDeuda[i].cuotas === candidata.cuotas) {
-        return { ok: false, motivo: `Ya hay una opción de ${etiquetaPlan(candidata.cuotas)} para esta deuda (${mismaDeuda[i].quita}% de quita).` };
+    /*
+     * Una financiación nunca puede ser económicamente mejor que la cancelación con
+     * quita ofrecida en el mismo menú: si paga igual o menos y además obtiene plazo,
+     * la cancelación inmediata queda indefendible. Se valida sobre el conjunto final
+     * para que el resultado no dependa del orden en que el cobrador apriete ➕.
+     * El pago del saldo completo queda afuera: no es una cancelación con beneficio.
+     */
+    const menuResultante = mismaDeuda.concat([candidata]);
+    const cancelacionesConQuita = menuResultante.filter(
+      (o) => o.modalidad === "pago_unico" && !o.esPagoTotal
+    );
+    const planesEnCuotas = menuResultante.filter((o) => o.cuotas > 1);
+    if (cancelacionesConQuita.length && planesEnCuotas.length) {
+      const cancelacionMayor = Math.max(...cancelacionesConQuita.map((o) => o.montoTotal));
+      const planIncoherente = planesEnCuotas.find((o) => o.montoTotal <= cancelacionMayor);
+      if (planIncoherente) {
+        return {
+          ok: false,
+          motivo: `El plan de ${etiquetaPlan(planIncoherente.cuotas)} totaliza $${planIncoherente.montoTotal.toLocaleString("es-AR")} y debe superar la cancelación con quita de $${cancelacionMayor.toLocaleString("es-AR")}.`,
+        };
+      }
+    }
+
+    const mismaModalidad = mismaDeuda.filter((o) => o.modalidad === candidata.modalidad);
+
+    for (let i = 0; i < mismaModalidad.length; i++) {
+      if (mismaModalidad[i].cuotas === candidata.cuotas) {
+        return { ok: false, motivo: `Ya hay una opción de ${etiquetaPlan(candidata.cuotas)} para esta modalidad (${mismaModalidad[i].quita}% de quita).` };
       }
     }
 
@@ -82,8 +162,8 @@ window.PropuestaCore = (function () {
     // carrito decidiría si una violación se detecta o queda tapada.
     let empate = null;
 
-    for (let i = 0; i < mismaDeuda.length; i++) {
-      const o = mismaDeuda[i];
+    for (let i = 0; i < mismaModalidad.length; i++) {
+      const o = mismaModalidad[i];
 
       if (candidata.cuotas > o.cuotas && candidata.montoTotal < o.montoTotal) {
         return { ok: false, motivo: `Con ${etiquetaPlan(candidata.cuotas)} pagaría menos que con ${etiquetaPlan(o.cuotas)}. El deudor elegiría siempre esta y la otra opción sobra.` };
@@ -152,18 +232,29 @@ window.PropuestaCore = (function () {
   };
 
   /**
-   * Al deudor se le comunica SIEMPRE el % sobre el saldo total (quitaSobreTotal),
-   * que es como se le viene hablando. El campo `quita` es el % sobre capital y es
-   * de uso interno: manda en los topes y en las reglas de dominancia, nunca se muestra.
+   * El renglón identifica expresamente la modalidad. Para quitas se comunica también el
+   * porcentaje sobre capital, porque es parte del acuerdo; cuotas sin quita no expone ningún
+   * porcentaje de quita.
    */
   function lineaOpcion(o, numero) {
-    const cuerpo = o.cuotas === 1
-      ? `Pago único con ${o.quitaSobreTotal}% de quita → *${pesos(o.montoTotal)}*`
-      : `${o.cuotas} cuotas con ${o.quitaSobreTotal}% de quita → *${o.cuotas} × ${pesos(o.valorCuota)}* (total ${pesos(o.montoTotal)})`;
-    return `${numero}. ${cuerpo}`;
+    const porModalidad = {
+      pago_unico: o.esPagoTotal
+        ? `Cancelación total sin quita → *${pesos(o.montoTotal)}*`
+        : `Cancelación con quita: intereses condonados ${pesos(o.interesesCondonados)} + ${o.quita}% sobre capital → *${pesos(o.montoTotal)}*`,
+      cuotas_sin_quita: `Acuerdo de Pago en ${o.cuotas} cuotas sin quita → *${o.cuotas} × ${pesos(o.valorCuota)}* (total ${pesos(o.montoTotal)})`,
+      quita_en_cuotas: `Quita en ${o.cuotas} cuotas: intereses condonados ${pesos(o.interesesCondonados)} + ${o.quita}% sobre capital → *${o.cuotas} × ${pesos(o.valorCuota)}* (total ${pesos(o.montoTotal)})`
+    };
+    return `${numero}. ${porModalidad[o.modalidad] || "Opción no disponible"}`;
   }
 
   const ISO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+  /** Formatea un ISO de fecha civil sin pasar por Date ni aplicar zona horaria. */
+  function fechaArgentinaDesdeISO(iso) {
+    if (typeof iso !== "string" || !ISO_FECHA.test(iso)) return "";
+    const partes = iso.split("-");
+    return partes[2] + "/" + partes[1] + "/" + partes[0];
+  }
 
   /**
    * La fecha que se comunica es la más temprana de todo el carrito.
@@ -191,6 +282,25 @@ window.PropuestaCore = (function () {
     const alguna = opciones.filter((o) => o && o.fechaVenc)[0];
     return alguna ? alguna.fechaVenc : "";
   }
+
+  /**
+   * Las dos piezas que van en TODOS los mensajes que le llegan al deudor —quitas, cuotas,
+   * refinanciación, primer contacto o seguimiento—: la pregunta por el motivo del atraso
+   * y el bloque de consecuencias.
+   *
+   * Viven acá y no copiadas en cada armador porque son texto que redactó la operación y
+   * que se lee palabra por palabra: con seis copias, el día que se cambie una frase van a
+   * quedar cinco mensajes diciendo otra cosa, sin error y sin test en rojo.
+   *
+   * `armarMensaje` hace la pregunta dentro de su apertura —con la redacción propia de cada
+   * plantilla—, así que usa `CONSECUENCIAS` pero no `PREGUNTA_MOTIVO`.
+   */
+  const PREGUNTA_MOTIVO =
+    "Antes de avanzar, ¿podés contarme brevemente cuál fue el motivo de tu atraso?";
+
+  const CONSECUENCIAS =
+    "⚠️ Mientras la deuda continúe en mora, *puede afectar tu historial crediticio y continuar informándose en BCRA*.\n\n" +
+    "✅ Al regularizarla, *podrás avanzar en la actualización de tu situación crediticia y normalizar tu cuenta*.";
 
   /** "1 opción de pago con beneficios" / "2 opciones de pago con beneficios". */
   const etiquetaOpciones = (n) =>
@@ -223,6 +333,7 @@ window.PropuestaCore = (function () {
    */
   function armarMensaje(opciones, titular, opts) {
     if (!Array.isArray(opciones) || opciones.length === 0) return "";
+    if (opciones.some((o) => !fechaArgentinaDesdeISO(o && o.fechaInicioMoraISO))) return "";
     opts = opts || {};
     titular = titular || {};
     const deudas = [];
@@ -240,8 +351,8 @@ window.PropuestaCore = (function () {
       const ref = b.opciones[0];
       // El criterio es `quitaSobreTotal`, NO `quita`. `quita` es el % sobre capital y la
       // fila "Quita de Intereses" de la solapa Quitas la guarda en 0 aunque condone todos
-      // los intereses: mirándola, una tarjeta de 60 a 89 días —donde esa fila es la única
-      // que existe— saldría con el CBU SIN quita mientras el PDF firmado lleva el CON quita.
+      // los intereses: para esa opción autorizada debe usarse la cuenta CON quita tanto en
+      // el mensaje como en el PDF.
       // Es el mismo criterio que ya usan `copiarPlan` y `generarPDFCuotas` en script.js.
       const conQuita = b.opciones.some((o) => o.quitaSobreTotal > 0);
       const cuenta = textoCuenta(b.deuda, conQuita);
@@ -255,7 +366,7 @@ window.PropuestaCore = (function () {
         productos ? "📋 Productos en gestión: " + productos : null,
         "• Saldo total adeudado (con intereses): " + pesos(ref.totalConInteres),
         "• Saldo capital: " + pesos(ref.capital),
-        "• Días de mora: " + ref.diasMora,
+        "• Fecha de inicio de mora: " + fechaArgentinaDesdeISO(ref.fechaInicioMoraISO),
       ].filter(Boolean).join("\n");
 
       const lineas = b.opciones.map((o) => lineaOpcion(o, ++numero)).join("\n");
@@ -294,9 +405,10 @@ window.PropuestaCore = (function () {
     // con beneficios y sin fecha de corte. Queda anotado como supuesto a confirmar.
     const vencimiento = `⏳ Estas opciones vencen el *${fecha}*. Si no regularizás dentro de ese plazo, *podés perder los beneficios ofrecidos*.`;
 
-    const consecuencias = opts.huboGestionPrevia
-      ? "⚠️ Mientras la deuda continúe en mora, *puede afectar tu historial crediticio y continuar informándose en BCRA*.\n\n✅ Al regularizarla, *podrás avanzar en la actualización de tu situación crediticia y normalizar tu cuenta*."
-      : "✅ Si regularizás tu deuda, *podrás normalizar tu situación con Ualá y recuperar el uso de tu cuenta, según corresponda*.";
+    // El bloque es el mismo en las dos plantillas. Antes el de primer contacto tenía solo
+    // la consecuencia positiva: el deudor que recién entra en gestión es justamente el que
+    // todavía no sabe lo que se le viene si no paga.
+    const consecuencias = CONSECUENCIAS;
 
     const pregunta = opts.huboGestionPrevia
       ? "¿Cuál de estas opciones podrías abonar?"
@@ -322,5 +434,5 @@ ${pregunta}`;
   // `fechaVencMasTemprana` se exporta por el mismo motivo: el PDF del carrito la usa para
   // comunicar el MISMO vencimiento que el WhatsApp. Si se saca del export, el acuerdo
   // firmado vuelve a la fecha de su propia foto y las dos piezas se contradicen.
-  return { topeQuitaPorMora, topeQuitaPorCuotas, quitaMaxima, MORA_MIN_QUITA_EN_CUOTAS, validarAgregado, MAX_POR_DEUDA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje };
+  return { topeQuitaPorMora, maxCuotasPorSaldo, opcionesCuotas, opcionesQuita, ordenarComercial, mejorPorModalidad, prioridadPara, validarAgregado, MAX_POR_DEUDA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje, PREGUNTA_MOTIVO, CONSECUENCIAS };
 })();

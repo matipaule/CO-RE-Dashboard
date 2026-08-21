@@ -161,7 +161,7 @@ select option {
 .btn-main:hover { background: var(--primary-hover); transform: scale(1.01); }
 
 /* Tablas */
-.table-responsive { overflow-x: auto; margin-top: 15px; }
+.table-responsive { max-width: 100%; overflow-x: auto; margin-top: 15px; }
 table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
 th { color: var(--text-dim); text-align: left; padding: 10px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; }
 td { background: #273549; padding: 15px 10px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -185,6 +185,7 @@ tr.recomendado td { border-left: 4px solid var(--accent-green) !important; backg
     transition: 0.2s;
 }
 .copiar-btn:hover { background: var(--primary); color: #0f172a; }
+.btn-ancho-completo { width: 100%; }
 
 /* Ayuda y FAQ */
 .ayuda-grid { display: grid; gap: 15px; margin-top: 15px; }
@@ -234,6 +235,22 @@ tr.recomendado td { border-left: 4px solid var(--accent-green) !important; backg
 /* Evita que el input de tipo number se vea distinto */
 input[type="number"] {
     padding-left: 45px;
+}
+
+/* Los campos de fecha, sin estilar, salen con el look nativo del navegador: fondo
+   blanco y borde claro, que sobre el tema oscuro desentona. Estos valores son los
+   mismos que los tres inputs de fecha viejos traen repetidos inline, así que los
+   cinco campos del dashboard se ven iguales. Los inline ganan por especificidad y
+   quedan como estaban; sacarlos es una limpieza aparte. */
+input[type="date"] {
+    background: var(--bg-color);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-sizing: border-box;
+    color: white;
+    font-size: 1rem;
+    padding: 12px 14px;
+    width: 100%;
 }
 
 /* Agregá esto al final de tu style.css */
@@ -334,6 +351,97 @@ table th {
 .esc-td-bloqueada { color: #475569; text-align: center; }
 .esc-td-ok { cursor: pointer; }
 .esc-td-elegida { background: rgba(34, 197, 94, 0.18); font-weight: bold; }
+.atajos-cuotas { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.atajos-cuotas button { min-width: 54px; }
+.estado-ofertas { min-height: 1.5em; margin: 10px 0; color: var(--text-dim); }
+.estado-ofertas:not(:empty) { padding: 8px 10px; background: #0f172a; border-radius: 8px; }
+.prioridad-verde { --prioridad-color: var(--accent-green); color: var(--accent-green); }
+.prioridad-amarillo { --prioridad-color: var(--accent-gold); color: var(--accent-gold); }
+.prioridad-rojo { --prioridad-color: var(--accent-red); color: var(--accent-red); }
+
+/* El color ordena, pero el texto de prioridad y su motivo explican cada semáforo. */
+.resumen-comercial { margin: 24px 0; }
+.resumen-comercial h3 { color: var(--primary); font-size: 1.05rem; margin: 0; }
+.resumen-comercial p { color: var(--text-dim); font-size: 0.9rem; margin: 4px 0 12px; }
+.resumen-caminos {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+.tarjeta-camino {
+    align-items: flex-start;
+    background: #273549;
+    border: 2px solid var(--prioridad-color, var(--border));
+    border-radius: 10px;
+    color: var(--text-main);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    font: inherit;
+    gap: 5px;
+    padding: 14px;
+    text-align: left;
+}
+.tarjeta-camino > strong { color: var(--primary); font-size: 1rem; }
+.tarjeta-camino .etiqueta-prioridad { color: var(--prioridad-color); font-weight: 700; }
+.tarjeta-camino > span { font-size: 0.82rem; line-height: 1.35; }
+.tarjeta-camino[disabled] {
+    border-color: #64748b;
+    color: #cbd5e1;
+    cursor: not-allowed;
+    opacity: 0.82;
+}
+.tarjeta-camino[disabled] .etiqueta-prioridad { color: #cbd5e1; }
+
+button:focus-visible,
+select:focus-visible,
+.tarjeta-camino:focus-visible {
+    outline: 3px solid var(--primary);
+    outline-offset: 3px;
+}
+
+/* Las dos modalidades de Quitas son independientes y se leen una debajo de la otra.
+   Compartir una fila dejaba menos de 450 px por tabla y obligaba a usar una barra
+   horizontal para llegar a Importe, Recuperación y Acciones. */
+.paneles-quita {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 24px;
+}
+.panel-modalidad {
+    background: #1e293b;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    min-width: 0;
+    padding: 16px;
+}
+.panel-modalidad h3 {
+    color: var(--primary);
+    font-size: 1rem;
+    margin: 0 0 6px;
+}
+.panel-modalidad td small {
+    color: var(--text-dim);
+    font-size: 0.76rem;
+}
+.panel-modalidad table {
+    table-layout: fixed;
+}
+.panel-modalidad th,
+.panel-modalidad td {
+    overflow-wrap: anywhere;
+    vertical-align: top;
+}
+.panel-modalidad th:last-child,
+.panel-modalidad td:last-child {
+    width: 24%;
+}
+.panel-modalidad .copiar-btn {
+    margin: 2px 0;
+    padding: 7px 9px;
+    white-space: nowrap;
+}
 
 /* Fila de acción de la solapa Cuotas: aparece recién cuando hay un plan elegido en la grilla. */
 .accion-plan {
@@ -343,6 +451,98 @@ table th {
     border: 1px solid var(--border);
     border-radius: 8px;
 }
+.accion-plan[hidden] { display: none; }
 .accion-plan-texto { margin: 0 0 10px 0; color: #cbd5e1; font-size: 0.92rem; }
 /* En celular los tres botones se apilan en vez de desbordar la tarjeta. */
 .accion-plan-botones { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Sub-solapas de Refinanciación */
+.subtabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.subtab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 10px 16px;
+}
+
+.subtab:hover {
+    color: var(--primary);
+}
+
+.subtab.activa {
+    border-bottom-color: var(--primary);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.fila-productos {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.fila-productos > div {
+    flex: 1;
+    min-width: 140px;
+}
+
+.nota-campo {
+    color: var(--text-dim);
+    display: block;
+    font-size: 0.85rem;
+    margin: -4px 0 14px;
+}
+
+.errores-campo:not(:empty) {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    padding: 10px 14px;
+}
+
+.errores-campo p {
+    margin: 4px 0;
+}
+
+.errores-campo .aviso {
+    color: var(--accent-gold);
+}
+
+.errores-campo.solo-avisos:not(:empty) {
+    background: rgba(251, 191, 36, 0.1);
+    border-color: rgba(251, 191, 36, 0.4);
+}
+
+.alerta-formato {
+    color: var(--accent-gold);
+    display: block;
+    font-size: 0.85rem;
+    min-height: 1.2em;
+    margin: -4px 0 10px;
+}
+
+/* El ícono y el placeholder los dibuja el navegador. Se limita el esquema oscuro a
+   los dos calendarios nuevos para no cambiar el aspecto de los tres campos viejos. */
+#refiPropFecha,
+#refiConfFecha {
+    color-scheme: dark;
+}
+
+@media (max-width: 600px) {
+    .card { padding: 1rem; }
+    .resumen-caminos,
+    .paneles-quita { grid-template-columns: 1fr; }
+    .panel-modalidad { min-width: 0; }
+    .table-responsive table { min-width: 620px; }
+}

@@ -25,6 +25,7 @@
             <li><a href="#" data-seccion="cuotas">Cuotas</a></li>
             <li><a href="#" data-seccion="quitas">Quitas</a></li>
             <li><a href="#" data-seccion="manual">PDF Manual</a></li>
+            <li><a href="#" data-seccion="refinanciacion">Refinanciación</a></li>
             <li><a href="#" data-seccion="caja">Datos de pago</a></li>
             <li><a href="#" data-seccion="politicas">Politicas</a></li>
             <li><a href="#" data-seccion="faq">FAQ</a></li>
@@ -65,6 +66,11 @@
                     <h3>PDF Manual</h3>
                     <p>Generar un acuerdo a medida.</p>
                 </div>
+                <div class="card-acceso" onclick="navegarA('refinanciacion')">
+                    <span class="icon">🔄</span>
+                    <h3>Refinanciación</h3>
+                    <p>Propuesta y confirmación del plan de refinanciación.</p>
+                </div>
                 <div class="card-acceso" onclick="navegarA('caja')">
                     <span class="icon">🏦</span>
                     <h3>Datos de Pago</h3>
@@ -84,7 +90,7 @@
         </section>
 
         <section id="cuotas" class="pagina-oculta card">
-            <h2>Cuantificación de Cuotas</h2>
+            <h2>Acuerdos de Pago sin quita</h2>
             <div class="input-container">
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 4px;">
                     <div style="flex: 1; min-width: 200px;">
@@ -114,6 +120,11 @@
                         <input type="number" id="moraInputCuotas" placeholder="Ej: 130" style="padding-left: 45px;" min="0">
                     </div>
                     <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Mínimo 90 días de mora para ofrecer cuotas.</p>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label for="fechaInicioMoraInputCuotas">Fecha de inicio de mora (Emerix)</label>
+                    <input type="date" id="fechaInicioMoraInputCuotas" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
+                    <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Se mostrará en los mensajes. Los días de mora se mantienen para aplicar las políticas.</p>
                 </div>
                 <div style="margin-bottom: 15px;">
                     <label for="capitalCuotaInput">Saldo Capital (CRM)</label>
@@ -163,19 +174,36 @@
                 </div>
                 <button onclick="calcularCuotas()" class="btn-main">Generar Planes</button>
             </div>
+            <section class="resumen-comercial" aria-labelledby="tituloResumenCuotas">
+                <h3 id="tituloResumenCuotas">Resumen comercial</h3>
+                <p>Elegí cualquier camino para ir a sus ofertas autorizadas.</p>
+                <div class="resumen-caminos" data-resumen-caminos></div>
+            </section>
             <div id="resultadoHeader" class="resultado-header">
                 <p id="saldoRedondeado"></p>
             </div>
+            <div id="atajosCuotas" class="atajos-cuotas" aria-label="Accesos rápidos de cantidad de cuotas"></div>
+            <label for="selectorCuotas">Ir a una cantidad de cuotas</label>
+            <select id="selectorCuotas" disabled></select>
+            <div id="estadoCuotas" class="estado-ofertas" role="status"></div>
             <div class="table-responsive">
                 <table id="tablaCuotas">
-                    <thead><tr id="tablaCuotasHead"></tr></thead>
+                    <thead>
+                        <tr>
+                            <th>Prioridad</th>
+                            <th>Plan sin quita</th>
+                            <th>Primera cuota</th>
+                            <th>Total efectivo</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
                     <tbody></tbody>
                 </table>
             </div>
             <!-- Fila de acción del plan elegido. Arranca oculta: sin celda elegida no hay
                  plan sobre el que copiar, emitir el PDF ni sumar al carrito. La llena
                  renderAccionPlan() en script.js. -->
-            <div id="accionPlan" class="accion-plan" style="display:none;">
+            <div id="accionPlan" class="accion-plan" hidden>
                 <p id="accionPlanTexto" class="accion-plan-texto"></p>
                 <div class="accion-plan-botones">
                     <button class="copiar-btn" onclick="copiarPlanElegido(this)">💬 Copiar</button>
@@ -230,6 +258,12 @@
                     </div>
                 </div>
 
+                <div style="margin-bottom: 15px;">
+                    <label for="fechaInicioMoraInput">Fecha de inicio de mora (Emerix)</label>
+                    <input type="date" id="fechaInicioMoraInput" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
+                    <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Se mostrará en los mensajes. Los días de mora se mantienen para aplicar las políticas.</p>
+                </div>
+
                 <div style="display: flex; gap: 15px; margin-bottom: 15px;">
                     <div style="flex: 1;">
                         <label for="cantPrestamos">Cantidad de préstamos</label>
@@ -263,32 +297,35 @@
                     <input type="date" id="fechaVencInputQuita" style="padding-left:14px; font-size:1rem; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:12px 14px; color:white; width:100%; box-sizing:border-box;">
                     <p style="font-size:0.78rem; color:#94a3b8; margin-top:4px;">Si no completás una fecha, el PDF mostrará vencimiento a 48 hs.</p>
                 </div>
-                <button onclick="generarEscalaQuitas()" class="btn-main" style="width: 100%;">CALCULAR QUITAS</button>
+                <button onclick="generarEscalaQuitas()" class="btn-main btn-ancho-completo">CALCULAR QUITAS</button>
             </div>
 
-            <div id="infoEscala" class="resultado-header"></div>
-
-            <div class="table-responsive">
-                <table id="tablaQuitas">
-                    <thead>
-                        <tr>
-                            <th>Políticas</th>
-                            <th>% Quita</th>
-                            <th>Monto Final</th>
-                            <th>Copiar</th>
-                            <th>PDF</th>
-                            <th>Sumar</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-
-            <div id="contenedorSalto" style="display:none; margin-top: 25px; text-align: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px;">
-                <p id="textoSalto" style="color: var(--text-dim); font-size: 0.9rem; margin-bottom: 10px;">¿No acepta pago único?</p>
-                <button id="btnRefinanciar" onclick="saltarACuotas()" class="btn-main" style="background: rgba(56, 189, 248, 0.1); color: var(--primary); border: 1px solid var(--primary);">
-                    Refinanciar sobre Total →
-                </button>
+            <section class="resumen-comercial" aria-labelledby="tituloResumenQuitas">
+                <h3 id="tituloResumenQuitas">Resumen comercial</h3>
+                <p>Elegí cualquier camino para ir a sus ofertas autorizadas.</p>
+                <div class="resumen-caminos" data-resumen-caminos></div>
+            </section>
+            <div class="paneles-quita">
+                <article class="panel-modalidad" aria-labelledby="tituloPagoUnico">
+                    <h3 id="tituloPagoUnico">Cancelación en un pago</h3>
+                    <div id="estadoPagoUnico" class="estado-ofertas" role="status"></div>
+                    <div class="table-responsive">
+                        <table id="tablaPagoUnico">
+                            <thead><tr><th>Prioridad</th><th>Quita</th><th>Importe</th><th>Acciones</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </article>
+                <article id="panelQuitaEnCuotas" class="panel-modalidad" aria-labelledby="tituloQuitaEnCuotas">
+                    <h3 id="tituloQuitaEnCuotas">Quita en cuotas</h3>
+                    <div id="estadoQuitaEnCuotas" class="estado-ofertas" role="status"></div>
+                    <div class="table-responsive">
+                        <table id="tablaQuitaEnCuotas">
+                            <thead><tr><th>Prioridad</th><th>Plan</th><th>Cuota</th><th>Total efectivo</th><th>Acciones</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </article>
             </div>
         </section>
 
@@ -427,19 +464,11 @@
                     <p style="margin-top: 8px;"><a href="https://www.bcra.gov.ar" target="_blank" style="color: var(--primary);">www.bcra.gov.ar</a></p>
                 </div>
 
-                <div class="ayuda-item" style="border-left: 4px solid #ef4444;">
-                    <div class="faq-tag" style="color: #ef4444; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">URGENTE</div>
-                    <h4>⚠️ ¿Qué pasa si me atraso en una cuota?</h4>
-                    <p>El plan <strong>cae automáticamente</strong> y se reclama el total original con intereses.</p>
-                    <p style="margin-top: 8px;">Para mantenerlo: pagar antes de fin de mes, o como mínimo un <strong>pago parcial</strong>, o gestionar un nuevo plan antes de que caiga el vigente.</p>
-                </div>
-
                 <div class="ayuda-item" style="border-left: 4px solid #3b82f6;">
                     <div class="faq-tag" style="color: #3b82f6; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">TARJETAS</div>
                     <h4>💳 Tarjeta de Crédito (Mastercard)</h4>
                     <ul class="lista-politicas" style="font-size: 0.85rem; margin-top: 10px;">
                         <li><strong>Refinanciación:</strong> No habilitada por Ualá para ningún caso ni cliente <em>(por ahora)</em>. No hay cuotas ni quitas.</li>
-                        <li><strong>Rehabilitación:</strong> Solo si paga antes de los <strong>30 días</strong> de atraso. Si no, la tarjeta NO se rehabilita.</li>
                         <li><strong>Intereses:</strong> No se congelan, corren sobre saldo pendiente.</li>
                         <li><strong>Gestión:</strong> Cubrir pago mínimo antes del <strong>día 30</strong> del mes.</li>
                     </ul>
@@ -449,7 +478,7 @@
                     <div class="faq-tag" style="color: #10b981; font-size: 0.7rem; font-weight: bold; margin-bottom: 5px;">PAGOS</div>
                     <h4>🏦 CBU vs CVU: ¿Dónde debe pagar?</h4>
                     <p style="margin-bottom: 8px;"><strong>CBU (Oficial):</strong> Obligatorio para <strong>Cuotas o Quitas</strong>. Si paga por CVU, el beneficio se pierde y <strong>no hay devolución</strong>. La app no lo permite.</p>
-                    <p><strong>CVU (Personal):</strong> Solo para ponerse al día o pagos parciales sin acuerdo previo.</p>
+                    <p><strong>CVU (Personal):</strong> No corresponde a acuerdos de Cuotas o Quitas.</p>
                 </div>
 
                 <div class="ayuda-item" style="border-left: 4px solid #38bdf8;">
@@ -499,8 +528,117 @@
             </div>
         </section>
 
-        <!-- Carrito de propuestas: vive fuera de las solapas y se muestra solo cuando hay opciones cargadas. -->
-        <div id="panelPropuesta" class="panel-propuesta" style="display:none;">
+        <!-- Refinanciación: producto nuevo de Ualá. Las dos sub-solapas son formularios
+             independientes a propósito: entre la propuesta y la confirmación pasan 7 días
+             hábiles como mínimo, así que el operador vuelve en otra sesión y no hay nada
+             en memoria que heredar. -->
+        <section id="refinanciacion" class="pagina-oculta card">
+            <h2>Refinanciación</h2>
+
+            <div class="subtabs">
+                <button id="subtabPropuesta" class="subtab activa">1. Propuesta</button>
+                <button id="subtabConfirmacion" class="subtab">2. Confirmación</button>
+            </div>
+
+            <div id="panelPropuesta">
+                <div class="input-container">
+                    <label for="refiPropCuotas">Cantidad de cuotas (mínimo 12)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">#</span>
+                        <input type="number" id="refiPropCuotas" min="12" placeholder="12">
+                    </div>
+
+                    <label for="refiPropValorCuota">Valor de cada cuota (de Emerix)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="refiPropValorCuota" placeholder="58.000,00">
+                    </div>
+                    <small class="alerta-formato" id="refiPropValorCuotaAlerta"></small>
+
+                    <label for="refiPropAnticipo">Anticipo (de Emerix)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="refiPropAnticipo" placeholder="80.000,00">
+                    </div>
+                    <small class="alerta-formato" id="refiPropAnticipoAlerta"></small>
+
+                    <label for="refiPropFecha">Fecha límite de pago del anticipo</label>
+                    <input type="date" id="refiPropFecha">
+                    <small class="nota-campo">Ualá tarda 7 días hábiles como mínimo en aprobar el plan. No contempla feriados: si la semana tiene uno, sumá margen.</small>
+
+                    <div id="refiPropErrores" class="errores-campo"></div>
+                    <button id="btnCopiarPropuestaRefi" class="btn-main" style="width: 100%;">💬 COPIAR PROPUESTA</button>
+                </div>
+            </div>
+
+            <div id="panelConfirmacion" style="display: none;">
+                <div class="input-container">
+                    <label for="refiConfNombre">Nombre y apellido del cliente</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">👤</span>
+                        <input type="text" id="refiConfNombre" placeholder="Ej: Juan Pérez" style="padding-left: 45px;">
+                    </div>
+
+                    <label>Productos que entran en la refinanciación</label>
+                    <div class="fila-productos">
+                        <div>
+                            <label for="refiConfPrestamos">Préstamos</label>
+                            <input type="number" id="refiConfPrestamos" min="0" value="0">
+                        </div>
+                        <div>
+                            <label for="refiConfCuotificaciones">Cuotificaciones</label>
+                            <input type="number" id="refiConfCuotificaciones" min="0" value="0">
+                        </div>
+                    </div>
+                    <small class="nota-campo">La tarjeta de crédito no se refinancia.</small>
+
+                    <label for="refiConfMontoTotal">Monto total a refinanciar (de Emerix)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="refiConfMontoTotal" placeholder="560.000,00">
+                    </div>
+                    <small class="alerta-formato" id="refiConfMontoTotalAlerta"></small>
+
+                    <label for="refiConfCuotas">Cantidad de cuotas (mínimo 12)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">#</span>
+                        <input type="number" id="refiConfCuotas" min="12" placeholder="12">
+                    </div>
+
+                    <label for="refiConfValorCuota">Valor de cada cuota (de Emerix)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="refiConfValorCuota" placeholder="58.000,00">
+                    </div>
+                    <small class="alerta-formato" id="refiConfValorCuotaAlerta"></small>
+
+                    <label for="refiConfAnticipo">Anticipo (de Emerix)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="refiConfAnticipo" placeholder="80.000,00">
+                    </div>
+                    <small class="alerta-formato" id="refiConfAnticipoAlerta"></small>
+
+                    <label for="refiConfFecha">Fecha límite para abonar el anticipo</label>
+                    <input type="date" id="refiConfFecha">
+                    <small class="nota-campo">Ualá tarda 7 días hábiles como mínimo en aprobar el plan. No contempla feriados.</small>
+
+                    <label for="refiConfDiaVenc">Día de vencimiento de las cuotas</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">📅</span>
+                        <input type="number" id="refiConfDiaVenc" min="1" max="31" placeholder="10" style="padding-left: 45px;">
+                    </div>
+
+                    <div id="refiConfErrores" class="errores-campo"></div>
+                    <button id="btnCopiarConfirmacionRefi" class="btn-main" style="width: 100%;">💬 COPIAR CONFIRMACIÓN</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Carrito de propuestas: vive fuera de las solapas y se muestra solo cuando hay opciones cargadas.
+             Ojo con el id: se llama panelCarritoPropuestas y no panelPropuesta porque ese nombre ya lo usa
+             el panel de la sub-solapa Propuesta de Refinanciación, unas líneas más arriba. -->
+        <div id="panelCarritoPropuestas" class="panel-propuesta" style="display:none;">
             <div class="panel-propuesta-head">
                 <span id="propuestaBadge"></span>
                 <button class="btn-limpiar" onclick="Propuestas.limpiar()">✕ Limpiar</button>
@@ -519,5 +657,7 @@
 <script src="js/script.js"></script>
 <script src="js/propuesta-core.js"></script>
 <script src="js/propuestas.js"></script>
+<script src="js/refinanciacion-core.js"></script>
+<script src="js/refinanciacion.js"></script>
 </body>
 </html>

@@ -18,6 +18,7 @@ window.Propuestas = (function () {
     ["capitalInput", "capitalCuotaInput"],
     ["totalConInteresInput", "saldoInput"],
     ["moraInput", "moraInputCuotas"],
+    ["fechaInicioMoraInput", "fechaInicioMoraInputCuotas"],
     ["fechaVencInputQuita", "fechaVencInput"],
     ["tipoProductoQuita", "tipoProductoCuotas"],
     ["cantPrestamos", "cantPrestamosCuotas"],
@@ -29,8 +30,14 @@ window.Propuestas = (function () {
       const a = document.getElementById(par[0]);
       const b = document.getElementById(par[1]);
       if (!a || !b) return;
-      a.addEventListener("input", function () { b.value = a.value; });
-      b.addEventListener("input", function () { a.value = b.value; });
+      const copiarEInvalidar = function (origen, destino) {
+        destino.value = origen.value;
+        if (typeof window.invalidarNegociacion === "function") window.invalidarNegociacion();
+      };
+      a.addEventListener("input", function () { copiarEInvalidar(a, b); });
+      b.addEventListener("input", function () { copiarEInvalidar(b, a); });
+      a.addEventListener("change", function () { copiarEInvalidar(a, b); });
+      b.addEventListener("change", function () { copiarEInvalidar(b, a); });
     });
   }
 
@@ -42,12 +49,16 @@ window.Propuestas = (function () {
   const entero = (id) => parseInt((document.getElementById(id) || {}).value, 10) || 0;
 
   function leerDeuda() {
+    const capital = num("capitalInput");
+    const totalConInteres = num("totalConInteresInput");
     return {
       nombre: ((document.getElementById("nombreInput") || {}).value || "").trim(),
       dni: ((document.getElementById("dniInput") || {}).value || "").trim(),
-      capital: num("capitalInput"),
-      totalConInteres: num("totalConInteresInput"),
+      capital,
+      totalConInteres,
+      saldoTotal: totalConInteres,
       diasMora: entero("moraInput"),
+      fechaInicioMoraISO: ((document.getElementById("fechaInicioMoraInput") || {}).value || "").trim(),
       tipo: (document.getElementById("tipoProductoQuita") || {}).value || "prestamo",
       productos: {
         prestamos: entero("cantPrestamos"),
@@ -58,7 +69,7 @@ window.Propuestas = (function () {
 
   const _propuesta = new Map();   // clave: "deuda_quita_cuotas" → foto
 
-  const claveDe = (deuda, quita, cuotas) => deuda + "_" + quita + "_" + cuotas;
+  const claveDeOpcion = (opcion) => opcion.deuda + "_" + opcion.id;
 
   /**
    * Mismo formato que `obtenerFechaVenc` en script.js:160 — "16 de agosto de 2026".
@@ -92,50 +103,17 @@ window.Propuestas = (function () {
   }
 
   /**
-   * Guarda la invariante de la deuda: todas las opciones de una MISMA deuda
-   * comparten capital, totalConInteres y diasMora.
-   *
-   * No es cosmético y no se puede sacar: armarMensaje arma el encabezado del bloque
-   * con los datos de la PRIMERA opción de cada deuda (`b.opciones[0]`). Si el operador
-   * corrige el capital o la mora entre dos altas del mismo producto, las opciones del
-   * bloque quedan con datos distintos y al deudor se le comunica el saldo y la mora de
-   * la primera —sin error, sin aviso y sin ningún test en rojo—, mientras los montos
-   * ofrecidos salieron de otra base. Un fallo silencioso sobre plata que el deudor va
-   * a pagar es peor que un rechazo molesto.
-   *
-   * Hoy la tabla de quitas manda siempre cuotas: 1 y validarAgregado rechaza cuotas
-   * repetidas, así que nunca hay dos opciones de la misma deuda y el guard no llega a
-   * dispararse. Con la grilla de cuotas de la Task 8 sí se apilan varias por deuda:
-   * ahí es donde esto empieza a hacer falta de verdad.
-   *
-   * Se compara contra la primera opción de la deuda —la que manda en el mensaje—
-   * y se rechaza; no se pisa la foto vieja ni se actualizan las otras opciones solas.
-   *
-   * @returns {string|null} qué dato cambió, listo para el mensaje, o null si está todo bien.
-   */
-  function datosQueCambiaron(d) {
-    const ref = listar().filter((o) => o.deuda === d.tipo)[0];
-    if (!ref) return null;
-    if (ref.totalConInteres !== d.totalConInteres) return "otro saldo total";
-    if (ref.capital !== d.capital) return "otro saldo capital";
-    if (ref.diasMora !== d.diasMora) return "otra cantidad de días de mora";
-    return null;
-  }
-
-  /**
    * ¿La opción que se está agregando se calculó contra OTRA pantalla?
    *
-   * `agregar` toma el monto del closure del botón —congelado cuando se apretó CALCULAR— pero
+   * `agregarOpcion` recibe el monto de la foto —congelada cuando se apretó CALCULAR— pero
    * el capital, el saldo, la mora y el tipo del DOM en vivo. Entre las dos cosas puede haber
    * pasado que el operador edite un campo y NO recalcule: ahí la tabla dibujada sigue siendo
    * clickeable con los montos y los topes viejos. El caso peor es la mora: con 200 días
-   * aparece la fila del 50%, el operador corrige la mora a 50, aprieta ➕ sin recalcular y el
-   * mensaje sale diciendo "Días de mora: 50" y abajo "66% de quita" — cuando abajo de 60 días
-   * no hay ninguna quita autorizada. `datosQueCambiaron` no lo tapa: compara contra el carrito,
-   * y con el carrito vacío no hay contra qué comparar.
-   *
-   * Mismo patrón que `datosQueCambiaron`, pero contra la base del cálculo en vez del carrito.
-   * Sin `base` no se corta nada: es un llamado que no la pasa y ahí no hay nada que comparar.
+   * aparece la fila del 50%, el operador corrige la mora a 29, aprieta ➕ sin recalcular y el
+   * mensaje conserva la fecha de inicio de mora, pero la opción sigue teniendo una quita
+   * calculada con 200 días aunque en pantalla ya figuren 29.
+   * La defensa compara contra la base del cálculo, incluso cuando el carrito todavía está vacío.
+   * Sin `base` no se corta nada: no habría una foto anterior contra la cual comparar.
    *
    * @returns {string|null} qué dato cambió, listo para el mensaje, o null si está todo bien.
    */
@@ -145,6 +123,7 @@ window.Propuestas = (function () {
     if (base.totalConInteres !== d.totalConInteres) return "otro saldo total";
     if (base.capital !== d.capital) return "otro saldo capital";
     if (base.diasMora !== d.diasMora) return "otra cantidad de días de mora";
+    if (base.fechaInicioMoraISO !== d.fechaInicioMoraISO) return "otra fecha de inicio de mora";
     return null;
   }
 
@@ -169,120 +148,72 @@ window.Propuestas = (function () {
     );
   }
 
-  /**
-   * Guarda una FOTO del estado actual. No se relee el DOM después:
-   * la segunda pasada (tarjeta) sobreescribe estos mismos inputs.
-   *
-   * `base` es la foto de los datos con los que se calculó la tabla de donde salió `montoTotal`
-   * (ver `baseDelCalculo` en script.js). Es opcional: sin ella el alta pasa como siempre.
-   */
-  function agregar(quita, cuotas, montoTotal, base) {
-    const d = leerDeuda();
-    const clave = claveDe(d.tipo, quita, cuotas);
+  function datosDeFotoQueCambiaron(foto) {
+    const ref = listar().filter((o) => o.deuda === foto.deuda)[0];
+    if (!ref) return null;
+    if (ref.totalConInteres !== foto.totalConInteres) return "otro saldo total";
+    if (ref.capital !== foto.capital) return "otro saldo capital";
+    if (ref.diasMora !== foto.diasMora) return "otra cantidad de días de mora";
+    if (ref.fechaInicioMoraISO !== foto.fechaInicioMoraISO) return "otra fecha de inicio de mora";
+    return null;
+  }
 
-    if (_propuesta.has(clave)) { quitar(clave); return; }
-
-    // Los dos guards de estado viejo van primero: si la opción se calculó contra otra pantalla,
-    // no tiene sentido avisar por titular ni por dominancia. Van DESPUÉS del toggle de arriba
-    // porque sacar una opción del carrito siempre está permitido.
-    const desactualizado = baseQueCambio(base, d);
-    if (desactualizado) {
-      alert(
-        "⚠️ Los datos en pantalla cambiaron después de calcular: ahora figura " + desactualizado + ".\n\n" +
-        "Esta opción se calculó con los datos anteriores, así que el monto no corresponde a lo " +
-        "que hay cargado. Volvé a calcular y sumá la opción de la tabla nueva."
-      );
-      return;
-    }
-
-    // Red de seguridad final: la tarjeta de crédito no admite plan de cuotas. Si una grilla de
-    // préstamo quedó dibujada y el tipo pasó a tarjeta, el ➕ armaría una tarjeta en cuotas —y
-    // su PDF sale por `generarPDFCuotas`, que hornea el CBU de préstamos.
-    if (d.tipo === "tarjeta" && cuotas > 1) {
-      alert(
-        "⚠️ La tarjeta de crédito no admite plan de cuotas. Solo pago único con quita.\n\n" +
-        "Si la grilla de cuotas quedó de un cálculo anterior, volvé a calcular."
-      );
-      return;
-    }
-
-    // El titular se valida ANTES que los montos: si cambió el deudor, avisar por "otro saldo
-    // total" manda al operador a mirar los números cuando el problema es de quién son.
+  /** Guarda la foto canónica sin volver a calcular ninguna cifra económica. */
+  function guardarOpcion(clave, candidata) {
+    if (_propuesta.has(clave)) { quitar(clave); return { ok: true, quitada: true }; }
     const enCarrito = listar();
-    const otro = enCarrito.filter((o) => chocaTitular(o, d))[0];
-    if (otro) { avisarOtroTitular(otro, d); return; }
-
-    const choque = datosQueCambiaron(d);
-    if (choque) {
-      alert(
-        "⚠️ Ya hay opciones cargadas para esta deuda con " + choque + ".\n\n" +
-        "Todas las opciones de una misma deuda tienen que compartir el mismo saldo, " +
-        "capital y días de mora. Si los datos nuevos son los correctos, limpiá el " +
-        "carrito y volvé a cargar las opciones."
-      );
-      return;
+    const otro = enCarrito.filter((o) => chocaTitular(o, candidata))[0];
+    if (otro) { avisarOtroTitular(otro, candidata); return { ok: false }; }
+    const cambio = datosDeFotoQueCambiaron(candidata);
+    if (cambio) {
+      alert("⚠️ Ya hay opciones cargadas para esta deuda con " + cambio + ".\n\nLimpiá el carrito y volvé a cargar las opciones.");
+      return { ok: false };
     }
-
-    const candidata = { deuda: d.tipo, quita: quita, cuotas: cuotas, montoTotal: montoTotal };
-    const v = window.PropuestaCore.validarAgregado(listar(), candidata);
-
-    if (!v.ok) { alert("⚠️ " + v.motivo); return; }
-    if (v.confirmar && !confirm("⚠️ " + v.confirmar)) return;
-
-    /*
-     * Fotos sin ningún dato del titular + un titular en pantalla: se pregunta, no se rechaza.
-     *
-     * Por acá entraba el mensaje mezclado del round 2 —préstamo agregado SIN nombre, después una
-     * tarjeta de otra persona con el nombre puesto: `datosQueCambiaron` no cruza deudas distintas
-     * y `chocaTitular` no ve nada porque la foto vieja está vacía—, pero el mismo estado lo deja
-     * un uso perfectamente normal: ➕, cargar la ficha, ➕ de nuevo. Las dos historias son
-     * idénticas por dato, así que no hay guard que las separe: decide el operador, que es el
-     * único que sabe a quién está atendiendo.
-     *
-     * El round 2 rechazaba acá y trababa ese flujo de tres pasos, obligando a limpiar el carrito
-     * sin que hubiera pasado nada malo. Es el mismo criterio que `copiarMensaje`: preguntar.
-     *
-     * Va al final a propósito: cuando se llega hasta acá el alta ya está aprobada, así que la
-     * pregunta no aparece para terminar rechazando por saldo o mora, y —más importante— no se
-     * completa ninguna foto vieja para un alta que después se cae.
-     */
-    const sinAtar = enCarrito.filter(sinTitular);
-    if (sinAtar.length && (d.nombre || d.dni)) {
-      const ok = confirm(
-        "⚠️ " + (sinAtar.length === 1
-          ? "Hay una opción en el carrito que se cargó"
-          : "Hay " + sinAtar.length + " opciones en el carrito que se cargaron") +
-        " antes de completar el titular.\n\n" +
-        "¿Son de " + (d.nombre || "(sin nombre)") + ", DNI " + (d.dni || "(sin DNI)") + "?\n\n" +
-        "Si son de otro deudor, cancelá y limpiá el carrito antes de seguir."
-      );
-      if (!ok) return;
-    }
-
-    // Recién acá se toca lo que ya estaba: el alta está aprobada. A las fotos a las que les
-    // falta un campo suelto se les completa igual —el que tienen ya coincidió en `chocaTitular`—.
-    completarTitularVacio(enCarrito, d);
-
-    const f = fechaVencDe();
-    _propuesta.set(clave, {
-      deuda: d.tipo,
-      nombre: d.nombre,                   // el titular también va en la foto: ver titularQueCambio
-      dni: d.dni,
-      capital: d.capital,
-      totalConInteres: d.totalConInteres,
-      diasMora: d.diasMora,
-      productos: d.tipo === "tarjeta" ? {} : d.productos,
-      quita: quita,                       // % sobre capital — interno
-      quitaSobreTotal: d.totalConInteres > 0
-        ? Math.floor(((d.totalConInteres - montoTotal) / d.totalConInteres) * 100)
-        : 0,                              // % sobre el total — lo que ve el deudor
-      cuotas: cuotas,
-      montoTotal: montoTotal,
-      valorCuota: Math.ceil(montoTotal / cuotas),
-      fechaVenc: f.fechaVenc,
-      fechaVencISO: f.fechaVencISO,
-    });
+    const v = window.PropuestaCore.validarAgregado(enCarrito, candidata);
+    if (!v.ok) { alert("⚠️ " + v.motivo); return v; }
+    if (v.confirmar && !confirm("⚠️ " + v.confirmar)) return { ok: false, cancelada: true };
+    _propuesta.set(clave, candidata);
     render();
+    return { ok: true };
+  }
+
+  /**
+   * Única entrada al carrito: recibe la opción calculada y guarda una foto completa e inmutable.
+   * Los precios, cuotas y quitas ya vienen calculados por PropuestaCore; el DOM sólo aporta la
+   * defensa de contexto y datos identificatorios, nunca vuelve a derivar montos.
+   */
+  function agregarOpcion(opcion) {
+    const base = leerDeuda();
+    if (!opcion || !opcion.id) return { ok: false, motivo: "La opción ya no está disponible. Recalculá." };
+    if (base.tipo === "tarjeta") {
+      const resultado = { ok: false, motivo: "Tarjeta de crédito no admite estas ofertas." };
+      alert("⚠️ " + resultado.motivo);
+      return resultado;
+    }
+    const desactualizado = baseQueCambio({
+      tipo: opcion.tipo || opcion.deuda || base.tipo,
+      totalConInteres: opcion.totalConInteres ?? opcion.saldoTotal,
+      capital: opcion.capital,
+      diasMora: opcion.diasMora,
+      fechaInicioMoraISO: opcion.fechaInicioMoraISO
+    }, base);
+    if (desactualizado) {
+      const resultado = { ok: false, motivo: "Los datos en pantalla cambiaron después de calcular: " + desactualizado + ". Recalculá." };
+      alert("⚠️ " + resultado.motivo);
+      return resultado;
+    }
+    const fecha = opcion.fechaVenc ? { fechaVenc: opcion.fechaVenc, fechaVencISO: opcion.fechaVencISO } : fechaVencDe();
+    const candidata = Object.freeze({
+      ...base,
+      ...opcion,
+      deuda: base.tipo,
+      totalConInteres: base.saldoTotal,
+      saldoTotal: base.saldoTotal,
+      productos: Object.freeze({ ...base.productos }),
+      fechaVenc: fecha.fechaVenc,
+      fechaVencISO: fecha.fechaVencISO
+    });
+    return guardarOpcion(claveDeOpcion(candidata), candidata);
   }
 
   /**
@@ -338,26 +269,11 @@ window.Propuestas = (function () {
     // saldrían de vencimientos distintos. Si no se encuentra se cae a esta foto.
     const laDeLaFecha = items.filter((x) => x.fechaVenc === fechaVenc)[0] || o;
 
-    const datos = {
-      nombre: o.nombre,
-      dni: o.dni,
-      totalConInteres: o.totalConInteres,   // lo lee el PDF de quita
-      saldoTotal: o.totalConInteres,        // lo lee el PDF de cuotas
-      diasMora: o.diasMora,
-      fechaVenc: fechaVenc,
-      // `fechaVenc` ya viene formateado ("20 de agosto de 2026") y de ahí no se saca el día
-      // de forma confiable; el PDF de cuotas lo necesita suelto para "Cuotas siguientes".
-      diaVenc: diaDelISO(laDeLaFecha.fechaVencISO),
-      productos: o.productos,
-    };
-
-    if (o.cuotas === 1) {
-      // generarPDFQuita espera el % sobre el saldo TOTAL, que es el que ya viene en la foto.
-      // `o.quita` es sobre el capital y es de uso interno: no va al PDF.
-      generarPDFQuita(o.montoTotal, o.quitaSobreTotal, o.deuda, datos);
-    } else {
-      generarPDFCuotas(o.cuotas, o.valorCuota, datos);
-    }
+    generarPDFOpcion(Object.freeze({
+      ...o,
+      fechaVenc,
+      diaVenc: diaDelISO(laDeLaFecha.fechaVencISO) || laDeLaFecha.diaVenc
+    }));
   }
 
   function quitar(clave) { _propuesta.delete(clave); render(); }
@@ -375,7 +291,7 @@ window.Propuestas = (function () {
 
   /** Dibuja el panel del carrito. Con el carrito vacío el panel se esconde entero. */
   function render() {
-    const panel = document.getElementById("panelPropuesta");
+    const panel = document.getElementById("panelCarritoPropuestas");
     const badge = document.getElementById("propuestaBadge");
     const lista = document.getElementById("propuestaLista");
     if (!panel) return;
@@ -388,15 +304,17 @@ window.Propuestas = (function () {
       " · " + deudas.size + (deudas.size === 1 ? " deuda" : " deudas");
 
     lista.innerHTML = items.map(function (o) {
-      const plan = o.cuotas === 1
-        ? "Pago único → $" + o.montoTotal.toLocaleString("es-AR")
-        : o.cuotas + " cuotas de $" + o.valorCuota.toLocaleString("es-AR");
-      const clave = claveDe(o.deuda, o.quita, o.cuotas);
+      const plan = {
+        pago_unico: (o.esPagoTotal ? "Cancelación total sin quita" : "Cancelación con quita") + " → $" + o.montoTotal.toLocaleString("es-AR"),
+        cuotas_sin_quita: "Acuerdo de Pago en " + o.cuotas + " cuotas → " + o.cuotas + " × $" + o.valorCuota.toLocaleString("es-AR"),
+        quita_en_cuotas: "Quita en " + o.cuotas + " cuotas → " + o.cuotas + " × $" + o.valorCuota.toLocaleString("es-AR")
+      }[o.modalidad] || "Opción no disponible";
+      const clave = claveDeOpcion(o);
       // Los dos botones van juntos en un contenedor: el `space-between` del ítem separa a
       // sus hijos por igual, y con tres el 📄 quedaría flotando en el medio de la fila.
       return `<div class="propuesta-item">
           <span>
-            <strong>${plan}</strong> · ${o.quita}% quita
+            <strong>${plan}</strong> · total efectivo $${o.montoTotal.toLocaleString("es-AR")}
             <div class="item-deuda">${NOMBRE_DEUDA[o.deuda] || o.deuda}</div>
           </span>
           <span style="display:flex; gap:8px; align-items:center;">
@@ -434,14 +352,16 @@ window.Propuestas = (function () {
   /**
    * Completa las fotos a las que les falta el titular.
    *
-   * Se llama desde `agregar` —cuando aparece un titular y el carrito tiene fotos sin atar, con
+   * Se llama desde `agregarOpcion` —cuando aparece un titular y el carrito tiene fotos sin atar, con
    * la confirmación del operador— y desde `copiarMensaje`, para el carrito que se cargó entero
    * antes de completar la ficha. Un campo ya cargado nunca se pisa: eso sería cambiar de deudor.
    */
   function completarTitularVacio(items, d) {
     items.forEach(function (o) {
-      if (!o.nombre) o.nombre = d.nombre;
-      if (!o.dni) o.dni = d.dni;
+      if (!o.nombre || !o.dni) {
+        const completa = Object.freeze({ ...o, nombre: o.nombre || d.nombre, dni: o.dni || d.dni });
+        _propuesta.set(claveDeOpcion(o), completa);
+      }
     });
   }
 
@@ -452,7 +372,7 @@ window.Propuestas = (function () {
    * El mensaje se arma con el titular de la FOTO, no con el del DOM: la foto es la fuente de
    * verdad, igual que con los montos.
    *
-   * El choque de titular se corta en el ➕ (ver `agregar`), pero se vuelve a chequear acá: este
+   * El choque de titular se corta en el ➕ (ver `agregarOpcion`), pero se vuelve a chequear acá: este
    * es el único punto por el que el mensaje sale a la calle, y entre el último ➕ y el botón el
    * operador puede haber cambiado los campos de la ficha.
    */
@@ -466,7 +386,7 @@ window.Propuestas = (function () {
     if (otro) { avisarOtroTitular(otro, d); return; }
 
     /*
-     * Fotos sin ningún dato del titular. Misma pregunta que en `agregar` y por el mismo motivo,
+     * Fotos sin ningún dato del titular. Misma pregunta que en `agregarOpcion` y por el mismo motivo,
      * pero el guard de allá no la hace redundante: si el operador cargó todo el carrito antes de
      * completar la ficha y aprieta ARMAR PROPUESTA sin volver a usar el ➕, nunca pasó por aquel
      * camino y las fotos siguen sin atar. Este es el último punto antes de que el mensaje salga.
@@ -488,10 +408,15 @@ window.Propuestas = (function () {
     }
 
     completarTitularVacio(items, d);
+    const fotosActualizadas = listar();
+    if (fotosActualizadas.some((o) => !o.fechaInicioMoraISO)) {
+      alert("⚠️ Completá la fecha de inicio de mora de Emerix y recalculá las opciones antes de copiar el mensaje.");
+      return;
+    }
 
     const texto = window.PropuestaCore.armarMensaje(
-      items,
-      { nombre: items[0].nombre, dni: items[0].dni },
+      fotosActualizadas,
+      { nombre: fotosActualizadas[0].nombre, dni: fotosActualizadas[0].dni },
       { huboGestionPrevia: huboGestionPrevia(), operador: nombreOperador() }
     );
     navigator.clipboard.writeText(texto).then(function () {
@@ -531,5 +456,5 @@ window.Propuestas = (function () {
     iniciar();
   }
 
-  return { leerDeuda, agregar, quitar, limpiar, listar, copiarMensaje, generarPDF };
+  return { leerDeuda, agregarOpcion, quitar, limpiar, listar, copiarMensaje, generarPDF };
 })();
