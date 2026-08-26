@@ -185,11 +185,6 @@ window.Propuestas = (function () {
   function agregarOpcion(opcion) {
     const base = leerDeuda();
     if (!opcion || !opcion.id) return { ok: false, motivo: "La opción ya no está disponible. Recalculá." };
-    if (base.tipo === "tarjeta") {
-      const resultado = { ok: false, motivo: "Tarjeta de crédito no admite estas ofertas." };
-      alert("⚠️ " + resultado.motivo);
-      return resultado;
-    }
     const desactualizado = baseQueCambio({
       tipo: opcion.tipo || opcion.deuda || base.tipo,
       totalConInteres: opcion.totalConInteres ?? opcion.saldoTotal,

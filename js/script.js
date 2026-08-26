@@ -715,11 +715,12 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos, opcion) {
 
     y += altoCondiciones + 4;
 
-    // Bloque de pago — toda la solapa Quitas usa la cuenta CON quita.
-    // La cuenta SIN quita solo aplica desde el PDF Manual.
-    y = bloquePago(doc, y, tipo, true);
+    // El pago total de tarjeta conserva su CBU normal; cualquier beneficio usa
+    // la cuenta específica de TDC con quita. En préstamos ambas ramas coinciden.
+    const conQuita = opcion ? opcion.quitaSobreTotal > 0 : true;
+    y = bloquePago(doc, y, tipo, conQuita);
 
-    const clausula4 = "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
+    const clausula4 = "4. Este beneficio aplica exclusivamente a la deuda y al producto identificados en este documento. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
 
     const clausulas = [
         "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
@@ -808,6 +809,13 @@ function generarPDFQuitaEnCuotas(opcion, datos) {
 /** Emite el PDF desde la misma foto completa que usan el carrito y el mensaje. */
 function generarPDFOpcion(opcionCompleta) {
     if (!opcionCompleta) return;
+    if (opcionCompleta.deuda === "tarjeta") {
+        const politica = PropuestaCore.validarAgregado([], opcionCompleta);
+        if (!politica.ok) {
+            alert("⚠️ " + politica.motivo);
+            return;
+        }
+    }
     switch (opcionCompleta.modalidad) {
         case "pago_unico":
             generarPDFQuita(
@@ -1214,9 +1222,6 @@ function generarPDFCuotas(opcionOcuotas, contextoOValor, datosLegado) {
 /** Busca la foto de pago único autorizada para el importe manual, sin recalcular topes en el DOM. */
 function opcionManualAutorizada(datos, montoPagar) {
     const tope = PropuestaCore.topeQuitaPorMora(datos.diasMora);
-    if (datos.tipo === "tarjeta") {
-        return { ok: false, motivo: "Tarjeta de crédito no admite estas ofertas." };
-    }
     if (tope === null) {
         return { ok: false, motivo: "Cancelación con quita disponible desde 30 días de mora." };
     }
@@ -1376,7 +1381,7 @@ function generarPDFPuroManual() {
     // Llamada a los bloques comunes con tipo de producto + flag de quita
     y = bloquePago(doc, y, tipo, conQuita); 
 
-    const clausula4 = "4. Este beneficio aplica exclusivamente a préstamos y cuotificaciones (tarjeta de crédito, en caso de poseer, está excluida). Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
+    const clausula4 = "4. Este beneficio aplica exclusivamente a la deuda y al producto identificados en este documento. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
 
     const clausulas = [
         "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
