@@ -1219,17 +1219,48 @@ function generarPDFCuotas(opcionOcuotas, contextoOValor, datosLegado) {
 
     doc.save(`Plan_Cuotas_${nombre.replace(/\s+/g, "_")}.pdf`);
 }
-/** Busca la foto de pago único autorizada para el importe manual, sin recalcular topes en el DOM. */
+/** Valida el importe manual contra el tope de capital y devuelve una foto canónica para el PDF. */
 function opcionManualAutorizada(datos, montoPagar) {
     const tope = PropuestaCore.topeQuitaPorMora(datos.diasMora);
     if (tope === null) {
         return { ok: false, motivo: "Cancelación con quita disponible desde 30 días de mora." };
     }
-    const opcion = PropuestaCore.opcionesQuita(datos).pagoUnico.opciones
-        .find((candidata) => candidata.montoTotal === montoPagar);
-    return opcion
-        ? { ok: true, opcion }
-        : { ok: false, motivo: "El monto debe coincidir con una opción de pago único autorizada." };
+
+    const pagoUnico = PropuestaCore.opcionesQuita(datos).pagoUnico;
+    if (!pagoUnico.disponible) return { ok: false, motivo: pagoUnico.motivo };
+
+    const saldoTotal = Number(datos.saldoTotal);
+    const capital = Number(datos.capital);
+    const montoTotal = Math.round(Number(montoPagar) * 100) / 100;
+    const pagoMinimo = Math.round(capital * (1 - tope / 100) * 100) / 100;
+    if (!Number.isFinite(montoTotal) || montoTotal < pagoMinimo || montoTotal > saldoTotal) {
+        return {
+            ok: false,
+            motivo: `Para ${datos.diasMora} días de mora, el monto debe estar entre $${pagoMinimo.toLocaleString("es-AR")} y $${saldoTotal.toLocaleString("es-AR")}.`
+        };
+    }
+
+    const descuentoCapital = Math.max(0, capital - montoTotal);
+    const interesesCondonados = Math.max(0, saldoTotal - Math.max(capital, montoTotal));
+    const quita = Number((descuentoCapital / capital * 100).toFixed(2));
+    const opcion = {
+        id: `pago_unico-manual-${montoTotal}`,
+        modalidad: "pago_unico",
+        quita,
+        esPagoTotal: montoTotal === saldoTotal,
+        quitaSobreTotal: Number(((1 - montoTotal / saldoTotal) * 100).toFixed(2)),
+        cuotas: 1,
+        saldoTotal,
+        capital,
+        interesesCondonados,
+        descuentoCapital,
+        totalObjetivo: montoTotal,
+        valorCuota: montoTotal,
+        montoTotal,
+        cobroInicial: montoTotal,
+        recuperacionSobreTotal: montoTotal / saldoTotal * 100
+    };
+    return { ok: true, opcion };
 }
 
 // ==========================================
