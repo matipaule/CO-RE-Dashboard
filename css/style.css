@@ -546,3 +546,25 @@ select:focus-visible,
     .panel-modalidad { min-width: 0; }
     .table-responsive table { min-width: 620px; }
 }
+
+/* Casos recientes: la lista de clientes calculados en las últimas 48 h. */
+.casos-recientes { background: #161e2e; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; margin: 12px 0 18px; }
+.casos-recientes summary { cursor: pointer; color: var(--primary); font-weight: 600; }
+.lista-casos { list-style: none; margin: 10px 0 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.caso-reciente { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-top: 1px solid var(--border); font-size: 0.88rem; }
+.caso-reciente small { color: var(--text-dim); }
+.caso-envio { display: block; margin-top: 2px; }
+.caso-reciente-acciones { display: flex; gap: 6px; }
+.casos-herramientas { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.casos-herramientas input[type="search"] { flex: 1; min-width: 180px; background: #0f172a; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: white; font-size: 0.9rem; }
+.casos-dia { color: var(--text-dim); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; padding: 10px 0 2px; }
+[data-cr-estado] { margin: 8px 0 0; color: #22c55e; }
+[data-cr-estado]:empty { display: none; }
+
+/* Manual de uso */
+.guia-indice { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.guia-indice a { color: var(--primary); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; font-size: 0.85rem; text-decoration: none; }
+.guia-bloques { display: grid; gap: 16px; }
+.guia-bloques .ayuda-item { scroll-margin-top: 80px; }
+.guia-bloques p { margin: 8px 0; }
+.guia-bloques ol.lista-politicas { padding-left: 20px; }

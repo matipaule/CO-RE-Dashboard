@@ -29,6 +29,7 @@
             <li><a href="#" data-seccion="caja">Datos de pago</a></li>
             <li><a href="#" data-seccion="politicas">Politicas</a></li>
             <li><a href="#" data-seccion="faq">FAQ</a></li>
+            <li><a href="#" data-seccion="guia">Manual de uso</a></li>
         </ul>
     </nav>
 </header>
@@ -86,11 +87,17 @@
                     <h3>FAQ</h3>
                     <p>Dudas frecuentes de clientes.</p>
                 </div>
+                <div class="card-acceso" onclick="navegarA('guia')">
+                    <span class="icon">📘</span>
+                    <h3>Manual de uso</h3>
+                    <p>Cómo usar el dashboard, políticas y gestión.</p>
+                </div>
             </div>
         </section>
 
         <section id="cuotas" class="pagina-oculta card">
             <h2>Acuerdos de Pago sin quita</h2>
+            <details class="casos-recientes" data-casos-recientes></details>
             <div class="input-container">
                 <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 4px;">
                     <div style="flex: 1; min-width: 200px;">
@@ -215,6 +222,7 @@
 
         <section id="quitas" class="pagina-oculta card">
             <h2>Campaña de Quitas Autorizadas</h2>
+            <details class="casos-recientes" data-casos-recientes></details>
             <div class="input-container" style="max-width: 100%; margin: 0 auto;">
 
                 <div style="display: flex; gap: 15px; margin-bottom: 15px; flex-wrap: wrap;">
@@ -438,8 +446,15 @@
                     <li><strong>90-120 días:</strong> 100% Int. + 20% Cap.</li>
                     <li><strong>120-150 días:</strong> 100% Int. + 30% Cap.</li>
                     <li><strong>150-180 días:</strong> 100% Int. + 40% Cap.</li>
-                    <li><strong>Quita en cuotas (+180 días):</strong> únicamente 50% sobre capital en 3 cuotas.</li>
-                    <li><strong>+180 días:</strong> 100% Int. + 50% Cap. <em>(tope máximo)</em></li>
+                    <li><strong>+180 días:</strong> 100% Int. + 50% Cap. en un pago <em>(tope máximo)</em></li>
+                    <li><strong>Quita en cuotas (+180 días):</strong> únicamente 100% Int. + 40% Cap. en 3 cuotas. La quita se aplica al pagar la última cuota: avisale al titular.</li>
+                </ul>
+                <h3>📌 Datos importantes</h3>
+                <ul class="lista-politicas">
+                    <li>Todos los acuerdos especiales se pagan a nuestros CBU y Back Office los imputa a mano.</li>
+                    <li>Cargá cada pago en el form y en Émerix.</li>
+                    <li>Pedile al cliente el <strong>DNI del titular</strong> de la cuenta desde la que transfiere y el <strong>comprobante</strong>. Sin eso no se localiza el pago y se demora la acreditación.</li>
+                    <li>Recordale siempre que <strong>no ingrese dinero a la cuenta</strong> hasta que el pago esté acreditado.</li>
                 </ul>
             </div>
             <div class="ayuda-item">
@@ -535,6 +550,133 @@
              independientes a propósito: entre la propuesta y la confirmación pasan 7 días
              hábiles como mínimo, así que el operador vuelve en otra sesión y no hay nada
              en memoria que heredar. -->
+        <section id="guia" class="pagina-oculta card">
+            <div class="welcome-header" style="text-align: left; margin-bottom: 25px;">
+                <h2>Manual de uso</h2>
+                <p>Cómo trabajar con el dashboard, qué políticas aplica y qué cuidar en cada gestión. Vigente desde el 16/09/2026.</p>
+            </div>
+
+            <nav class="guia-indice" aria-label="Índice del manual">
+                <a href="#guia-inicio">1. Antes de empezar</a>
+                <a href="#guia-flujo">2. Flujo de trabajo</a>
+                <a href="#guia-secciones">3. Secciones</a>
+                <a href="#guia-politicas">4. Políticas vigentes</a>
+                <a href="#guia-cobro">5. Cobro e imputación</a>
+                <a href="#guia-mensajes">6. Mensajes al cliente</a>
+                <a href="#guia-datos">7. Datos guardados</a>
+                <a href="#guia-problemas">8. Problemas frecuentes</a>
+            </nav>
+
+            <div class="guia-bloques">
+
+                <article class="ayuda-item" id="guia-inicio">
+                    <h3>1. Antes de empezar</h3>
+                    <p>El dashboard arma propuestas de pago, mensajes de WhatsApp y acuerdos en PDF a partir de los datos del cliente. No registra pagos ni reemplaza a Emerix.</p>
+                    <ul class="lista-politicas">
+                        <li><strong>Operador:</strong> escribí tu nombre arriba de todo una sola vez. Los mensajes se presentan con él.</li>
+                        <li><strong>Datos que necesitás:</strong> nombre y DNI del titular, saldo total con intereses y saldo capital (Emerix), días de mora (Mambu), fecha de inicio de mora (Emerix) y cantidad de préstamos y cuotificaciones.</li>
+                        <li><strong>Montos:</strong> se escriben con punto de miles y coma de decimales (<code>1.600.000,50</code>). Si ves el aviso de "¿Usaste punto para decimales?", revisalo.</li>
+                    </ul>
+                </article>
+
+                <article class="ayuda-item" id="guia-flujo">
+                    <h3>2. Flujo de trabajo recomendado</h3>
+                    <ol class="lista-politicas">
+                        <li>Cargá los datos del cliente en <strong>Quitas</strong> o en <strong>Cuotas</strong>. Se copian solos a la otra solapa.</li>
+                        <li>Tocá <strong>Calcular</strong>. El dashboard muestra solo las opciones que la política autoriza para esa mora, ese saldo y ese producto.</li>
+                        <li>Mirá el <strong>Resumen comercial</strong> y empezá por la opción verde: más cobro inmediato con menos concesión.</li>
+                        <li>Para una sola opción, usá <strong>Copiar</strong> o <strong>PDF</strong> en su fila. Para ofrecer varias, usá <strong>Sumar</strong> y después <strong>Armar propuesta</strong> en el carrito.</li>
+                        <li>Pegá el mensaje en WhatsApp y esperá la respuesta del cliente.</li>
+                        <li>Si pide otra opción, abrí <strong>Casos recientes</strong>, tocá <strong>Cargar</strong> y elegí la nueva.</li>
+                        <li>Cuando pague, pedile comprobante y DNI del titular de la cuenta de origen, y cargá el pago en el form y en Émerix.</li>
+                    </ol>
+                </article>
+
+                <article class="ayuda-item" id="guia-secciones">
+                    <h3>3. Secciones del dashboard</h3>
+                    <ul class="lista-politicas">
+                        <li><strong>Cuotas (Acuerdos de Pago sin quita):</strong> planes sobre el saldo total, sin quita, desde 90 días de mora. Elegí la cantidad de cuotas con los accesos rápidos o el selector y usá Copiar, PDF o Sumar.</li>
+                        <li><strong>Quitas:</strong> dos paneles. <em>Cancelación en un pago</em>: pago total o con quita según la mora. <em>Quita en cuotas</em>: solo desde 180 días.</li>
+                        <li><strong>Carrito de propuestas:</strong> aparece abajo cuando sumás opciones. Admite hasta 3 opciones por deuda y no deja armar menús incoherentes: con más cuotas el cliente siempre paga más. Marcá <em>Primer contacto</em> o <em>Ya hubo gestión previa</em> antes de armar el mensaje.</li>
+                        <li><strong>Casos recientes:</strong> arriba de Quitas y Cuotas. Guarda los datos de cada cliente que calculaste en las últimas 48 horas, agrupados por día y con la hora del cálculo. Buscá por nombre o DNI (con o sin puntos, sin importar tildes). Cada caso muestra también el <em>último envío</em>: el resumen de lo último que copiaste para ese cliente (no cuenta el PDF). <em>Cargar</em> rellena las dos solapas y recalcula; <em>Borrar</em> saca un caso y <em>Borrar todos</em> vacía la lista (pide un segundo clic).</li>
+                        <li><strong>PDF Manual:</strong> acuerdo de cancelación en un pago por un monto a medida. Valida que el monto esté dentro de la quita autorizada para la mora antes de generar el documento.</li>
+                        <li><strong>Refinanciación:</strong> dos pasos. <em>Propuesta</em> (saldo, productos, cuotas, anticipo y fecha límite) y <em>Confirmación</em> (términos que el cliente acepta escribiendo "Acepto"). La fecha límite tiene que dejar al menos 7 días hábiles para la aprobación de Ualá.</li>
+                        <li><strong>Datos de pago:</strong> CBU, alias y CUIT para copiar.</li>
+                        <li><strong>Políticas</strong> y <strong>FAQ:</strong> resumen rápido de topes y respuestas para el cliente.</li>
+                    </ul>
+                </article>
+
+                <article class="ayuda-item" id="guia-politicas">
+                    <h3>4. Políticas vigentes</h3>
+                    <p><strong>Cancelaciones (campaña de quitas)</strong></p>
+                    <ul class="lista-politicas">
+                        <li><strong>30 a 90 días:</strong> hasta 100% de los intereses (compensatorios y punitorios).</li>
+                        <li><strong>90 a 120 días:</strong> 100% de intereses y 20% del capital.</li>
+                        <li><strong>120 a 150 días:</strong> 100% de intereses y 30% del capital.</li>
+                        <li><strong>150 a 180 días:</strong> 100% de intereses y 40% del capital.</li>
+                        <li><strong>Más de 180 días:</strong> 100% de intereses y 50% del capital en un solo pago, o 100% de intereses y 40% del capital en 3 cuotas.</li>
+                    </ul>
+                    <p><strong>Quita en cuotas:</strong> las 3 cuotas ya vienen con el descuento, pero la quita se aplica al acreditarse la última. Si el plan no se completa, se pierde el beneficio. Avisáselo siempre al titular.</p>
+                    <p><strong>Acuerdos de pago (sin quita), según la deuda total</strong></p>
+                    <ul class="lista-politicas">
+                        <li>Hasta $1.000.000: hasta 12 cuotas.</li>
+                        <li>De $1.000.000 a $6.000.000: hasta 15 cuotas.</li>
+                        <li>De $6.000.000 a $20.000.000: hasta 18 cuotas.</li>
+                        <li>Más de $20.000.000: hasta 36 cuotas.</li>
+                    </ul>
+                    <p><strong>Cuota mínima:</strong> ningún plan en cuotas (acuerdo de pago o quita en cuotas) puede tener cuotas menores a $50.000. El dashboard no muestra esos planes.</p>
+                    <p><strong>Tarjeta de crédito:</strong> solo cancelaciones en un pago (con o sin quita). No admite cuotas, quita en cuotas ni refinanciación.</p>
+                    <p><strong>Refinanciación:</strong> solo préstamos y cuotificaciones, desde 12 cuotas, tasa anual del 50%.</p>
+                </article>
+
+                <article class="ayuda-item" id="guia-cobro">
+                    <h3>5. Cobro e imputación</h3>
+                    <ul class="lista-politicas">
+                        <li>Todos los acuerdos especiales se pagan a los <strong>CBU de Ualá</strong>. Back Office los imputa a mano.</li>
+                        <li>Cargá cada pago en el <strong>form</strong> y en <strong>Émerix</strong>.</li>
+                        <li>Pedí el <strong>comprobante</strong> y el <strong>DNI del titular</strong> de la cuenta desde la que se transfiere. Sin esos datos el pago no se localiza y la acreditación se demora.</li>
+                        <li>Recordale siempre al cliente que <strong>no ingrese dinero a su cuenta Ualá</strong> hasta que el pago esté acreditado.</li>
+                        <li>Préstamos y tarjeta con quita usan cuentas distintas. Si el cliente paga las dos deudas, son dos transferencias.</li>
+                    </ul>
+                </article>
+
+                <article class="ayuda-item" id="guia-mensajes">
+                    <h3>6. Mensajes al cliente</h3>
+                    <ul class="lista-politicas">
+                        <li>Primero va la deuda (saldo, productos y fecha de atraso) y después las opciones con su vencimiento.</li>
+                        <li>No prometas ahorros en pesos: el mensaje informa el total a pagar y los porcentajes de quita. Así el cliente no se queda con un importe que no se acordó.</li>
+                        <li>En el primer contacto se pregunta qué llevó al atraso y con qué ingresos cuenta. En un seguimiento, qué le impidió avanzar la vez pasada.</li>
+                        <li>El botón Copiar de cada fila arma el mensaje de primer contacto. Para un seguimiento, sumá la opción al carrito y marcá <em>Ya hubo gestión previa</em>.</li>
+                        <li>Leé el mensaje antes de enviarlo: el dashboard no conoce la conversación.</li>
+                    </ul>
+                </article>
+
+                <article class="ayuda-item" id="guia-datos">
+                    <h3>7. Datos guardados en tu PC</h3>
+                    <ul class="lista-politicas">
+                        <li>Tu nombre de operador y los casos recientes se guardan <strong>solo en tu navegador</strong>. No viajan por internet y otros operadores no los ven.</li>
+                        <li>Los casos recientes se borran solos a las <strong>48 horas</strong> del último cálculo, y se guardan como máximo 30.</li>
+                        <li>Si cambiás de PC o de navegador, o limpiás los datos de navegación, la lista empieza vacía.</li>
+                        <li>Si usás una PC compartida, tocá <em>Borrar todos</em> al terminar el día.</li>
+                    </ul>
+                </article>
+
+                <article class="ayuda-item" id="guia-problemas">
+                    <h3>8. Problemas frecuentes</h3>
+                    <ul class="lista-politicas">
+                        <li><strong>"Completá la fecha de inicio de mora":</strong> falta la fecha de Emerix. Cargala y volvé a calcular.</li>
+                        <li><strong>"Recalculá las opciones con los datos actuales":</strong> cambiaste un dato después de calcular. Tocá Calcular otra vez.</li>
+                        <li><strong>No aparecen cuotas o aparecen pocas:</strong> el Acuerdo de Pago empieza a los 90 días de mora, no aplica a tarjeta y no muestra planes con cuotas menores a $50.000.</li>
+                        <li><strong>No aparece la quita en cuotas:</strong> requiere más de 180 días de mora, no aplica a tarjeta y cada una de las 3 cuotas tiene que ser de al menos $50.000.</li>
+                        <li><strong>El PDF manual no se genera:</strong> el monto está fuera del rango autorizado para esa mora. El mensaje de error indica el rango.</li>
+                        <li><strong>La refinanciación no deja copiar:</strong> revisá los errores en rojo. La fecha tiene que dejar 7 días hábiles y hay que cargar saldo y al menos un producto.</li>
+                        <li><strong>Un caso no aparece en Casos recientes:</strong> se guardan al calcular y solo si tienen DNI.</li>
+                    </ul>
+                </article>
+
+            </div>
+        </section>
+
         <section id="refinanciacion" class="pagina-oculta card">
             <h2>Refinanciación</h2>
 
@@ -545,6 +687,32 @@
 
             <div id="panelPropuesta">
                 <div class="input-container">
+                    <label for="refiPropNombre">Nombre del cliente (opcional)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">👤</span>
+                        <input type="text" id="refiPropNombre" placeholder="Ej: Juan" style="padding-left: 45px;">
+                    </div>
+
+                    <label>Productos que entran en la refinanciación</label>
+                    <div class="fila-productos">
+                        <div>
+                            <label for="refiPropPrestamos">Préstamos</label>
+                            <input type="number" id="refiPropPrestamos" min="0" value="0">
+                        </div>
+                        <div>
+                            <label for="refiPropCuotificaciones">Cuotificaciones</label>
+                            <input type="number" id="refiPropCuotificaciones" min="0" value="0">
+                        </div>
+                    </div>
+                    <small class="nota-campo">La tarjeta de crédito no se refinancia.</small>
+
+                    <label for="refiPropMontoTotal">Saldo total con todos los productos (de Emerix)</label>
+                    <div class="input-wrapper">
+                        <span class="currency-symbol">$</span>
+                        <input type="text" id="refiPropMontoTotal" placeholder="560.000,00">
+                    </div>
+                    <small class="alerta-formato" id="refiPropMontoTotalAlerta"></small>
+
                     <label for="refiPropCuotas">Cantidad de cuotas (mínimo 12)</label>
                     <div class="input-wrapper">
                         <span class="currency-symbol">#</span>
@@ -660,6 +828,7 @@
 <script src="js/script.js"></script>
 <script src="js/propuesta-core.js"></script>
 <script src="js/propuestas.js"></script>
+<script src="js/casos-recientes.js"></script>
 <script src="js/refinanciacion-core.js"></script>
 <script src="js/refinanciacion.js"></script>
 </body>

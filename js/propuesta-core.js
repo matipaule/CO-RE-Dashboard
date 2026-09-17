@@ -14,9 +14,12 @@ window.PropuestaCore = (function () {
     { dias: 30, tope: 0 }
   ];
 
-  const PLANES_QUITA_EN_CUOTAS = Object.freeze([
-    Object.freeze({ quita: 50, cuotas: 3 })
-  ]);
+  /**
+   * Única quita en cuotas autorizada (+180 días). La quita se aplica al pagar la última
+   * cuota: los mensajes y el PDF tienen que avisarlo.
+   */
+  const QUITA_EN_CUOTAS = Object.freeze({ quita: 40, cuotas: 3 });
+  const PLANES_QUITA_EN_CUOTAS = Object.freeze([QUITA_EN_CUOTAS]);
 
   /** @returns {number|null} null = ninguna quita autorizada */
   function topeQuitaPorMora(diasMora) {
@@ -25,6 +28,10 @@ window.PropuestaCore = (function () {
     }
     return null;
   }
+
+  /** Ningún plan en cuotas baja de este valor por cuota (política de gestión, sin excepción). */
+  const CUOTA_MINIMA = 50000;
+  const MOTIVO_CUOTA_MINIMA = "Con este saldo la cuota quedaría por debajo del mínimo de $50.000.";
 
   function maxCuotasPorSaldo(saldoTotal) {
     if (saldoTotal <= 1000000) return 12;
@@ -85,7 +92,11 @@ window.PropuestaCore = (function () {
     if (datos.tipo === "tarjeta") return { disponible: false, motivo: "Tarjeta de crédito no admite Acuerdos de Pago.", opciones: [] };
     if (datos.diasMora < 90) return { disponible: false, motivo: "Acuerdo de Pago disponible desde 90 días de mora.", opciones: [] };
     const maximo = maxCuotasPorSaldo(datos.saldoTotal);
-    const opciones = Array.from({ length: maximo - 1 }, (_, indice) => indice + 2).map((cuotas) => crearOpcion({ modalidad: "cuotas_sin_quita", quita: 0, cuotas, saldoTotal: datos.saldoTotal, capital: datos.capital })).sort(ordenarComercial);
+    const opciones = Array.from({ length: maximo - 1 }, (_, indice) => indice + 2)
+      .map((cuotas) => crearOpcion({ modalidad: "cuotas_sin_quita", quita: 0, cuotas, saldoTotal: datos.saldoTotal, capital: datos.capital }))
+      .filter((opcion) => opcion.valorCuota >= CUOTA_MINIMA)
+      .sort(ordenarComercial);
+    if (!opciones.length) return { disponible: false, motivo: MOTIVO_CUOTA_MINIMA, opciones: [] };
     return { disponible: true, motivo: "", opciones };
   }
 
@@ -99,12 +110,18 @@ window.PropuestaCore = (function () {
       : Array.from({ length: tope / 10 + 1 }, (_, indice) => indice * 10)
         .map((quita) => crearOpcion({ modalidad: "pago_unico", quita, cuotas: 1, saldoTotal: datos.saldoTotal, capital: datos.capital }));
     const pagoUnico = { disponible: true, motivo: "", opciones: [pagoTotal, ...cancelacionesConQuita].sort(ordenarComercial) };
-    const quitaEnCuotas = datos.tipo === "tarjeta"
-      ? { disponible: false, motivo: "Tarjeta de crédito no admite quita en cuotas.", opciones: [] }
-      : datos.diasMora >= 180
-        ? { disponible: true, motivo: "", opciones: PLANES_QUITA_EN_CUOTAS.map((plan) => crearOpcion({ modalidad: "quita_en_cuotas", quita: plan.quita, cuotas: plan.cuotas, saldoTotal: datos.saldoTotal, capital: datos.capital })).sort(ordenarComercial) }
-        : { disponible: false, motivo: "Quita en cuotas disponible desde 180 días de mora.", opciones: [] };
-    return { pagoUnico, quitaEnCuotas };
+    return { pagoUnico, quitaEnCuotas: opcionesQuitaEnCuotas(datos) };
+  }
+
+  function opcionesQuitaEnCuotas(datos) {
+    if (datos.tipo === "tarjeta") return { disponible: false, motivo: "Tarjeta de crédito no admite quita en cuotas.", opciones: [] };
+    if (datos.diasMora < 180) return { disponible: false, motivo: "Quita en cuotas disponible desde 180 días de mora.", opciones: [] };
+    const opciones = PLANES_QUITA_EN_CUOTAS
+      .map((plan) => crearOpcion({ modalidad: "quita_en_cuotas", quita: plan.quita, cuotas: plan.cuotas, saldoTotal: datos.saldoTotal, capital: datos.capital }))
+      .filter((opcion) => opcion.valorCuota >= CUOTA_MINIMA)
+      .sort(ordenarComercial);
+    if (!opciones.length) return { disponible: false, motivo: MOTIVO_CUOTA_MINIMA, opciones: [] };
+    return { disponible: true, motivo: "", opciones };
   }
 
   const MAX_POR_DEUDA = 3;
@@ -124,8 +141,12 @@ window.PropuestaCore = (function () {
       return { ok: false, motivo: "Tarjeta de crédito no admite cuotas; solo cancelaciones en un pago." };
     }
 
-    if (candidata.modalidad === "quita_en_cuotas" && (candidata.quita !== 50 || candidata.cuotas !== 3)) {
-      return { ok: false, motivo: "La única quita en cuotas autorizada es 50% sobre capital en 3 cuotas." };
+    if (candidata.modalidad === "quita_en_cuotas" && (candidata.quita !== QUITA_EN_CUOTAS.quita || candidata.cuotas !== QUITA_EN_CUOTAS.cuotas)) {
+      return { ok: false, motivo: `La única quita en cuotas autorizada es ${QUITA_EN_CUOTAS.quita}% sobre capital en ${QUITA_EN_CUOTAS.cuotas} cuotas.` };
+    }
+
+    if (candidata.cuotas > 1 && candidata.valorCuota < CUOTA_MINIMA) {
+      return { ok: false, motivo: "La cuota no puede ser menor a $50.000." };
     }
 
     if (mismaDeuda.length >= MAX_POR_DEUDA) {
@@ -209,6 +230,8 @@ window.PropuestaCore = (function () {
 
   const RAZON_SOCIAL = "UALÁ BANK S.A.U.";
   const CUIT = "30-71565463-2";
+  /** Así la escribe la operación en los mensajes; el PDF sigue en mayúsculas. */
+  const RAZON_SOCIAL_MENSAJE = "Ualá Bank S.A.U.";
 
   /** Espejo de obtenerDatosCuenta en script.js:232. Tres cuentas distintas. */
   function datosCuenta(deuda, conQuita) {
@@ -231,34 +254,51 @@ window.PropuestaCore = (function () {
   }
 
   const pesos = (n) => "$" + Number(n).toLocaleString("es-AR");
+  /** Los mensajes escriben los importes como la operación: "$500.000.-". */
+  const importe = (n) => pesos(n) + ".-";
 
   const TITULO_DEUDA = {
-    prestamo: "🏦 PRÉSTAMOS Y CUOTIFICACIONES",
-    tarjeta: "💳 TARJETA DE CRÉDITO MASTERCARD",
+    prestamo: "PRÉSTAMOS Y CUOTIFICACIONES",
+    tarjeta: "TARJETA DE CRÉDITO MASTERCARD",
   };
 
-  /** Cada propuesta separa modalidad, total, forma de pago y beneficio para lectura rápida. */
+  const tieneQuita = (o) => !o.esPagoTotal && (o.modalidad === "pago_unico" || o.modalidad === "quita_en_cuotas");
+
+  /** Nunca "0% del capital": la quita solo de intereses se nombra sola. */
+  function textoQuita(o) {
+    return `Quita del 100% de intereses${o.quita > 0 ? ` y ${o.quita}% del capital` : ""}`;
+  }
+
+  /**
+   * Una línea por opción cuando se ofrecen varias. No hay ahorro en pesos: solo el total a
+   * pagar y los porcentajes, para que el cliente no se quede con un importe que no se prometió.
+   */
   function lineaOpcion(o, numero) {
-    const tieneQuita = !o.esPagoTotal && (o.modalidad === "pago_unico" || o.modalidad === "quita_en_cuotas");
-    const beneficio = tieneQuita
-      ? `\n   Beneficio aplicado: quita del 100% de los intereses${o.quita > 0 ? ` y del ${o.quita}% sobre el capital` : ""}.`
-      : "";
-    const sinInteresAdicional = "\n   Sin interés adicional: las cuotas no aumentan el monto total informado.";
-
     if (o.modalidad === "pago_unico") {
-      const titulo = o.esPagoTotal ? "Cancelación total sin quita" : "Cancelación con quita";
-      return `${numero}. *${titulo}*\n   *Total a pagar: ${pesos(o.montoTotal)}*${beneficio}`;
+      const detalle = o.esPagoTotal ? "Saldo total, sin quita." : textoQuita(o) + ".";
+      return `${numero}) Un pago de ${importe(o.montoTotal)} ${detalle}`;
     }
-
-    if (o.modalidad === "cuotas_sin_quita") {
-      return `${numero}. *Acuerdo de Pago sin quita*\n   *Total del acuerdo: ${pesos(o.montoTotal)}*\n   Forma de pago: *${o.cuotas} cuotas de ${pesos(o.valorCuota)}*${sinInteresAdicional}`;
-    }
-
     if (o.modalidad === "quita_en_cuotas") {
-      return `${numero}. *Quita en ${o.cuotas} cuotas*\n   *Total del acuerdo: ${pesos(o.montoTotal)}*\n   Forma de pago: *${o.cuotas} cuotas de ${pesos(o.valorCuota)}*${sinInteresAdicional}${beneficio}`;
+      return `${numero}) ${o.cuotas} cuotas de ${importe(o.valorCuota)} ${textoQuita(o)}, al pagar la última.`;
     }
+    if (o.modalidad === "cuotas_sin_quita") {
+      return `${numero}) ${o.cuotas} cuotas de ${importe(o.valorCuota)} Saldo total sin intereses.`;
+    }
+    return `${numero}) Opción no disponible.`;
+  }
 
-    return `${numero}. Opción no disponible`;
+  /** La propuesta única se cuenta en dos renglones: qué paga y con qué beneficio vence. */
+  function cuerpoUnico(o, fecha) {
+    if (o.modalidad === "pago_unico" && o.esPagoTotal) {
+      return `Podés regularizar todo con un único pago de ${importe(o.montoTotal)} y dejar tu cuenta al día. Válido hasta el ${fecha}.`;
+    }
+    if (o.modalidad === "pago_unico") {
+      return `Podés cancelar todo con un único pago de ${importe(o.montoTotal)}\n${textoQuita(o)}, válida hasta el ${fecha}.`;
+    }
+    if (o.modalidad === "quita_en_cuotas") {
+      return `Podés cancelar todo en ${o.cuotas} cuotas de ${importe(o.valorCuota)}\n${textoQuita(o)}, que se aplica al pagar la última cuota. Válida hasta el ${fecha}.`;
+    }
+    return `Podés regularizar en ${o.cuotas} cuotas fijas de ${importe(o.valorCuota)}, saldo total sin intereses. Válido hasta el ${fecha}.`;
   }
 
   const ISO_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -269,6 +309,10 @@ window.PropuestaCore = (function () {
     const partes = iso.split("-");
     return partes[2] + "/" + partes[1] + "/" + partes[0];
   }
+
+  const conFechaISO = (opciones) => opciones.filter(
+    (o) => o && typeof o.fechaVencISO === "string" && ISO_FECHA.test(o.fechaVencISO)
+  );
 
   /**
    * La fecha que se comunica es la más temprana de todo el carrito.
@@ -284,9 +328,7 @@ window.PropuestaCore = (function () {
    * con los datos rotos igual conviene emitir el mensaje a romper el armado entero.
    */
   function fechaVencMasTemprana(opciones) {
-    const conISO = opciones.filter(
-      (o) => o && typeof o.fechaVencISO === "string" && ISO_FECHA.test(o.fechaVencISO)
-    );
+    const conISO = conFechaISO(opciones);
 
     if (conISO.length) {
       const ordenadas = conISO.sort((a, b) => (a.fechaVencISO < b.fechaVencISO ? -1 : 1));
@@ -297,24 +339,19 @@ window.PropuestaCore = (function () {
     return alguna ? alguna.fechaVenc : "";
   }
 
-  /**
-   * Las dos piezas que van en TODOS los mensajes que le llegan al deudor —quitas, cuotas,
-   * refinanciación, primer contacto o seguimiento—: la pregunta por el motivo del atraso
-   * y el bloque de consecuencias.
-   *
-   * Viven acá y no copiadas en cada armador porque son texto que redactó la operación y
-   * que se lee palabra por palabra: con seis copias, el día que se cambie una frase van a
-   * quedar cinco mensajes diciendo otra cosa, sin error y sin test en rojo.
-   *
-   * `armarMensaje` hace la pregunta dentro de su apertura —con la redacción propia de cada
-   * plantilla—, así que usa `CONSECUENCIAS` pero no `PREGUNTA_MOTIVO`.
-   */
-  const PREGUNTA_MOTIVO =
-    "Antes de avanzar, ¿podés contarme brevemente cuál fue el motivo del atraso y cuál es tu situación actual?";
+  /** La misma fecha que `fechaVencMasTemprana`, en el formato corto del mensaje. */
+  function fechaVencCorta(opciones) {
+    const isos = conFechaISO(opciones).map((o) => o.fechaVencISO).sort();
+    return isos.length ? fechaArgentinaDesdeISO(isos[0]) : fechaVencMasTemprana(opciones);
+  }
 
-  const CONSECUENCIAS =
-    "⚠️ Mientras la deuda continúe en mora, *puede afectar tu historial crediticio y continuar informándose en BCRA*.\n\n" +
-    "✅ Al regularizarla, *podrás avanzar en la actualización de tu situación crediticia y normalizar tu cuenta*.";
+  /**
+   * La pregunta que va en TODOS los mensajes que le llegan al deudor —quitas, cuotas y
+   * refinanciación—. Vive acá y no copiada en cada armador: con varias copias, el día que
+   * se cambie una frase van a quedar mensajes diciendo otra cosa, sin ningún test en rojo.
+   */
+  const PREGUNTA_MOTIVO = "Comentame qué te llevó al atraso y con qué ingresos contás para abonar.";
+  const PREGUNTA_SEGUIMIENTO = "Comentame qué te impidió avanzar la vez pasada y con qué ingresos contás para abonar.";
 
   /**
    * Primera línea del mensaje.
@@ -331,15 +368,26 @@ window.PropuestaCore = (function () {
       : `${saludo} Te escribo de CO-RE, por tu cuenta Ualá.`;
   }
 
+  /** " (incluye 2 préstamos y 1 cuotificación)", o nada si no se cargaron productos. */
+  function incluye(productos) {
+    const txt = formatearProductos(productos);
+    return txt ? ` (incluye ${txt})` : "";
+  }
+
+  /** CBU y alias en una línea; la cuenta de tarjeta sin quita no tiene alias. */
+  function lineaCuenta(deuda, conQuita) {
+    const d = datosCuenta(deuda, conQuita);
+    return "CBU " + d.cbu + (d.alias ? " · Alias " + d.alias : "");
+  }
+
   /**
    * Un carrito vacío no es un error a gritar: devuelve "" y que decida el llamador.
    * La función es pura y no puede confiar en el guard de quien la llama; un bug de
    * UI o un doble click no pueden tumbar la app sin mensaje legible.
    *
-   * El texto es el que redactó la operación y se copia tal cual, incluidas las negritas
-   * de WhatsApp (`*`) y los emojis. Las dos plantillas —primer contacto y gestión previa—
-   * comparten el saludo, los bloques y el aviso de vencimiento, y se separan en la frase
-   * de apertura, en el bloque de consecuencias y en la pregunta del final.
+   * Orden fijo que pidió la supervisión: primero la deuda, después las propuestas con su
+   * vigencia, las preguntas y al final los datos oficiales de pago. Sin emojis, sin ahorro
+   * en pesos y apuntando a no pasar los 1.000 caracteres.
    */
   function armarMensaje(opciones, titular, opts) {
     if (!Array.isArray(opciones) || opciones.length === 0) return "";
@@ -353,112 +401,70 @@ window.PropuestaCore = (function () {
       if (propias.length) deudas.push({ deuda: d, opciones: propias });
     });
 
-    const soloTarjeta = deudas.length === 1 && deudas[0].deuda === "tarjeta";
-    const fecha = fechaVencMasTemprana(opciones);
-    let numero = 0;
-
-    const bloques = deudas.map(function (b) {
-      const ref = b.opciones[0];
-      // El criterio es `quitaSobreTotal`, NO `quita`. `quita` es el % sobre capital y la
-      // fila "Quita de Intereses" de la solapa Quitas la guarda en 0 aunque condone todos
-      // los intereses: para esa opción autorizada debe usarse la cuenta CON quita tanto en
-      // el mensaje como en el PDF.
-      // Es el mismo criterio que ya usan `copiarPlan` y `generarPDFCuotas` en script.js.
-      const conQuita = b.opciones.some((o) => o.quitaSobreTotal > 0);
-      const cuenta = textoCuenta(b.deuda, conQuita);
-      const productos = formatearProductos(ref.productos);
-
-      const encabezado = deudas.length > 1
-        ? `━━━ ${TITULO_DEUDA[b.deuda]} ━━━\n\n`
-        : "";
-
-      const detalle = [
-        productos ? "📋 Productos en gestión: " + productos : null,
-        "• Saldo total adeudado (con intereses): " + pesos(ref.totalConInteres),
-        "• Saldo capital: " + pesos(ref.capital),
-        "• Fecha de inicio de mora: " + fechaArgentinaDesdeISO(ref.fechaInicioMoraISO),
-      ].filter(Boolean).join("\n");
-
-      const lineas = b.opciones.map((o) => lineaOpcion(o, ++numero)).join("\n");
-      const tituloPropuestas = b.opciones.length === 1
-        ? "💰 *Propuesta disponible*"
-        : "💰 *Propuestas disponibles*";
-
-      return `${encabezado}📌 *Detalle de la deuda*\n${detalle}\n\n${tituloPropuestas}\n${lineas}\n\n🏦 *Datos para realizar el pago*\n${cuenta}`;
-    }).join("\n\n");
-
-    const avisoDosDeudas = deudas.length > 1
-      ? "\n\n⚠️ Son dos deudas separadas y se pagan a cuentas distintas. No las juntes en una sola transferencia."
-      : "";
-
-    // Con una sola deuda no hay encabezado de bloque —lo pone `deudas.length > 1`— y los
-    // `productos` de la tarjeta se guardan vacíos a propósito, así que el mensaje de una
-    // tarjeta sola daba saldo, mora, opción y CBU sin UNA palabra sobre qué deuda es. El
-    // botón Copiar de la misma fila sí lo dice (copiarChatQuita), con esta misma frase.
-    const exclusion = soloTarjeta
-      ? "\n\n⚠️ Este beneficio aplica a tu deuda de TARJETA DE CRÉDITO."
-      : "";
-
-    // Va con los datos de pago y no al final: el mensaje cierra con una pregunta a propósito.
-    // Que el CBU esté en el mensaje es justamente lo que hace falta este pedido — sin él, el
-    // deudor puede pagar sin avisar y el operador se entera cuando ya no puede acreditarlo.
-    const comprobante = "\n\n⚠️ *Importante:* avisame antes de pagar y mandame el comprobante por esta vía.";
-
+    const fecha = fechaVencCorta(opciones);
     const unica = opciones.length === 1 ? opciones[0] : null;
-    const preguntaSituacion = opts.huboGestionPrevia
-      ? "¿Podés contarme qué te impidió avanzar con las propuestas anteriores y cuál es tu situación actual?"
-      : "¿Podés contarme brevemente cuál fue el motivo del atraso y cuál es tu situación actual?";
-    let gancho = "*Hoy podés regularizar tu deuda con una propuesta de pago.*";
-    if (opciones.length > 1) {
-      gancho = "*Preparé alternativas para que puedas regularizar tu deuda pagando menos o en cuotas sin interés adicional.*";
-    } else if (unica.modalidad === "pago_unico" && unica.esPagoTotal) {
-      gancho = "*Hoy podés regularizar tu cuenta cancelando el saldo pendiente.*";
-    } else if (unica.modalidad === "pago_unico") {
-      gancho = `*Hoy podés cancelar tu deuda con quita del 100% de los intereses${unica.quita > 0 ? ` y del ${unica.quita}% sobre el capital` : ""}.*`;
-    } else if (unica.modalidad === "cuotas_sin_quita") {
-      gancho = `*Hoy podés regularizar tu deuda en ${unica.cuotas} cuotas sin interés adicional.*`;
-    } else if (unica.modalidad === "quita_en_cuotas") {
-      gancho = `*Hoy podés regularizar tu deuda en ${unica.cuotas} cuotas sin interés adicional y con quita del 100% de los intereses${unica.quita > 0 ? ` y del ${unica.quita}% sobre el capital` : ""}.*`;
+    const hayQuita = opciones.some(tieneQuita);
+    // El criterio de la cuenta es `quitaSobreTotal`, NO `quita`: la quita solo de intereses
+    // guarda `quita` en 0 y aun así va a la cuenta CON quita, igual que en el PDF.
+    const cuentaDe = (b) => lineaCuenta(b.deuda, b.opciones.some((o) => o.quitaSobreTotal > 0));
+    const mora = (b) => fechaArgentinaDesdeISO(b.opciones[0].fechaInicioMoraISO);
+    const saldo = (b) => importe(b.opciones[0].totalConInteres);
+
+    let detalle;
+    let propuestas;
+    let datosPago;
+    if (deudas.length === 1) {
+      const b = deudas[0];
+      detalle = b.deuda === "tarjeta"
+        ? `Te detallo: Saldo actual de tu tarjeta Mastercard: ${saldo(b)}, con atraso desde el ${mora(b)} e informado en bases crediticias.`
+        : `Te detallo: Saldo actual: ${saldo(b)}${incluye(b.opciones[0].productos)}, con atraso desde el ${mora(b)} e informado en bases crediticias.`;
+      propuestas = unica
+        ? cuerpoUnico(unica, fecha)
+        : `Tenés ${opciones.length} formas de regularizar, válidas hasta el ${fecha}:\n` +
+          opciones.map((o, i) => lineaOpcion(o, i + 1)).join("\n");
+      if (b.deuda === "tarjeta" && hayQuita) propuestas += "\nEste beneficio aplica solo a tu tarjeta.";
+      datosPago = `DATOS OFICIALES DE PAGO: Cuenta a nombre de ${RAZON_SOCIAL_MENSAJE} · CUIT ${CUIT} ·\n${cuentaDe(b)}`;
+    } else {
+      // Con dos deudas cada bloque lleva su saldo, sus opciones y su cuenta. La numeración
+      // corre de un bloque al otro para que el cliente pueda decir "quiero la 3".
+      let numero = 0;
+      detalle = "Te detallo tus deudas, con atraso e informadas en bases crediticias:";
+      propuestas = deudas.map(function (b) {
+        const productos = b.deuda === "prestamo" ? incluye(b.opciones[0].productos) : "";
+        return `${TITULO_DEUDA[b.deuda]}\nSaldo actual: ${saldo(b)}${productos}, con atraso desde el ${mora(b)}.\n` +
+          b.opciones.map((o) => lineaOpcion(o, ++numero)).join("\n") +
+          `\n${cuentaDe(b)}`;
+      }).join("\n\n") +
+        `\n\nOpciones válidas hasta el ${fecha}. Son dos deudas separadas: pagá cada una a su cuenta, en transferencias distintas.`;
+      datosPago = `DATOS OFICIALES DE PAGO: Cuentas a nombre de ${RAZON_SOCIAL_MENSAJE} · CUIT ${CUIT}, con el CBU indicado en cada deuda.`;
     }
-    const apertura = `${gancho}\n\n${preguntaSituacion}`;
 
-    // El aviso de caducidad va en las DOS plantillas. En el borrador de la operación aparecía
-    // solo en la de primer contacto; dejarlo afuera del seguimiento sería mandar una oferta
-    // con beneficios y sin fecha de corte. Queda anotado como supuesto a confirmar.
-    const vencimiento = opciones.length === 1
-      ? `⏳ Esta opción vence el *${fecha}*. Si no regularizás dentro de ese plazo, *podés perder el beneficio ofrecido*.`
-      : `⏳ Estas opciones vencen el *${fecha}*. Si no regularizás dentro de ese plazo, *podés perder los beneficios ofrecidos*.`;
+    const vence = unica && !tieneQuita(unica) && unica.modalidad !== "cuotas_sin_quita"
+      ? "esta propuesta"
+      : "este beneficio";
+    const cierre = unica
+      ? `¿Te sirve? ¿Necesitás otra opción? Contanos antes de que venza ${vence}.`
+      : "¿Cuál te conviene? ¿Necesitás más opciones? Contanos antes de que venzan estos u otros beneficios.";
 
-    // El bloque es el mismo en las dos plantillas. Antes el de primer contacto tenía solo
-    // la consecuencia positiva: el deudor que recién entra en gestión es justamente el que
-    // todavía no sabe lo que se le viene si no paga.
-    const consecuencias = CONSECUENCIAS;
-
-    const pregunta = opciones.length === 1
-      ? "¿Qué te parece esta propuesta? ¿Podrías avanzar con ella?"
-      : opts.huboGestionPrevia
-        ? "¿Cuál de estas opciones podrías abonar?"
-        : "¿Con cuál opción podrías avanzar?";
-
-    return `${presentacion(titular.nombre, opts.operador)}
-
-${apertura}
-
-${bloques}${avisoDosDeudas}${exclusion}${comprobante}
-
-${vencimiento}
-
-${consecuencias}
-
-${pregunta}`;
+    return [
+      presentacion(titular.nombre, opts.operador),
+      detalle,
+      "",
+      propuestas,
+      cierre,
+      opts.huboGestionPrevia ? PREGUNTA_SEGUIMIENTO : PREGUNTA_MOTIVO,
+      "",
+      datosPago,
+      "Avisame antes de pagar y mandame el comprobante y el DNI del titular de la cuenta desde la que transferís.",
+      `No ingreses dinero a tu cuenta Ualá hasta que se acredite, ya que NO podría aplicarse el ${hayQuita ? "descuento" : "acuerdo"}.`,
+    ].join("\n");
   }
 
-  // `presentacion` se exporta porque la usan también los dos mensajes de script.js
-  // (solapas Quitas y Cuotas): el saludo tiene una sola fuente de verdad y el caso
-  // del operador vacío se resuelve igual en los tres mensajes.
+  // `presentacion` se exporta porque la usa también la propuesta de refinanciación: el
+  // saludo tiene una sola fuente de verdad y el caso del operador vacío se resuelve igual.
   //
   // `fechaVencMasTemprana` se exporta por el mismo motivo: el PDF del carrito la usa para
   // comunicar el MISMO vencimiento que el WhatsApp. Si se saca del export, el acuerdo
   // firmado vuelve a la fecha de su propia foto y las dos piezas se contradicen.
-  return { topeQuitaPorMora, maxCuotasPorSaldo, opcionesCuotas, opcionesQuita, ordenarComercial, mejorPorModalidad, prioridadPara, validarAgregado, MAX_POR_DEUDA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje, PREGUNTA_MOTIVO, CONSECUENCIAS };
+  return { topeQuitaPorMora, maxCuotasPorSaldo, opcionesCuotas, opcionesQuita, ordenarComercial, mejorPorModalidad, prioridadPara, validarAgregado, MAX_POR_DEUDA, QUITA_EN_CUOTAS, CUOTA_MINIMA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje, importe, PREGUNTA_MOTIVO, PREGUNTA_SEGUIMIENTO };
 })();

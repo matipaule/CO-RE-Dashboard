@@ -34,6 +34,10 @@ window.Refinanciacion = (function () {
    */
   function datosPropuesta() {
     return {
+      nombre: texto("refiPropNombre"),
+      prestamos: entero("refiPropPrestamos") || 0,
+      cuotificaciones: entero("refiPropCuotificaciones") || 0,
+      montoTotal: monto("refiPropMontoTotal"),
       cuotas: entero("refiPropCuotas"),
       valorCuota: monto("refiPropValorCuota"),
       anticipo: monto("refiPropAnticipo"),
@@ -127,7 +131,7 @@ window.Refinanciacion = (function () {
    * cambiarle a ciegas el monto a un acuerdo es peor que el error que evita.
    */
   const CAMPOS_MONTO = [
-    "refiPropValorCuota", "refiPropAnticipo",
+    "refiPropMontoTotal", "refiPropValorCuota", "refiPropAnticipo",
     "refiConfMontoTotal", "refiConfValorCuota", "refiConfAnticipo",
   ];
 

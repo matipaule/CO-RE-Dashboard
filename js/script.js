@@ -145,6 +145,8 @@ function calcularCuotas() {
 function recalcularNegociacion() {
     invalidarNegociacion();
     const datos = Propuestas.leerDeuda();
+    // Cada cálculo deja el caso en "Casos recientes" para volver a cargarlo sin Emerix.
+    if (window.CasosRecientes) CasosRecientes.guardarDesdeFormulario();
     const cuotas = PropuestaCore.opcionesCuotas(datos);
     const quitas = PropuestaCore.opcionesQuita(datos);
     const contextoDeCuotas = contextoCuotasDelCalculo(datos);
@@ -364,6 +366,7 @@ function copiarPlan(opcion, btn) {
     const txt = PropuestaCore.armarMensaje([foto], { nombre: foto.nombre, dni: foto.dni }, { operador: nombreOperador() });
 
     navigator.clipboard.writeText(txt).then(() => {
+        if (window.CasosRecientes) CasosRecientes.registrarEnvio([foto]);
         const original = btn.innerText;
         btn.innerText = "¡Copiado!";
         setTimeout(() => btn.innerText = original, 1200);
@@ -540,6 +543,27 @@ function bloquePago(doc, y, tipo, conQuita) {
     });
     return y + 41;
 }
+
+/**
+ * Política de cobro vigente desde el 16/09/2026: Back Office imputa a mano, así que cada
+ * documento pide comprobante y DNI del titular de la cuenta de origen, y avisa que no se
+ * ingrese dinero en la cuenta Ualá hasta la acreditación.
+ *
+ * `bloqueTerminos` reserva 9 mm por cláusula: ninguna puede pasar de dos renglones.
+ */
+const CLAUSULA_NO_INGRESAR = "No ingrese dinero a su cuenta Ualá hasta que el pago esté acreditado";
+
+const CLAUSULAS_CANCELACION = [
+    "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
+    "2. El pago debe realizarse exclusivamente al CBU indicado, enviando el comprobante y el DNI del titular de la cuenta de origen. Pagos a CVU u otras cuentas no serán reconocidos.",
+    "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
+    "4. Este beneficio aplica exclusivamente a la deuda y al producto identificados en este documento. " + CLAUSULA_NO_INGRESAR + " (72 hs hábiles).",
+    "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
+    "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
+];
+
+const CLAUSULA_PAGO_EN_CUOTAS = "1. Los pagos deben realizarse exclusivamente al CBU informado. " + CLAUSULA_NO_INGRESAR + ".";
+const CLAUSULA_COMPROBANTE_CUOTAS = "2. Es obligatorio enviar el comprobante y el DNI del titular de la cuenta de origen para imputar cada pago.";
 
 function bloqueTerminos(doc, clausulas, y) {
     const W = 210, M = 20;
@@ -720,18 +744,7 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos, opcion) {
     const conQuita = opcion ? opcion.quitaSobreTotal > 0 : true;
     y = bloquePago(doc, y, tipo, conQuita);
 
-    const clausula4 = "4. Este beneficio aplica exclusivamente a la deuda y al producto identificados en este documento. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
-
-    const clausulas = [
-        "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
-        "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
-        "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
-        clausula4,
-        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
-    ];
-
-    y = bloqueTerminos(doc, clausulas, y);
+    y = bloqueTerminos(doc, CLAUSULAS_CANCELACION, y);
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 
@@ -769,7 +782,8 @@ function generarPDFQuitaEnCuotas(opcion, datos) {
         ["Descuento sobre capital:", opcion.quita + "% (" + formatoMonto(descuentoCapital) + ")"],
         ["Cantidad de cuotas:", opcion.cuotas + " cuotas"],
         ["Valor de cuota:", formatoMonto(opcion.valorCuota)],
-        ["Vencimiento de la primera cuota:", datos.fechaVenc]
+        ["Vencimiento de la primera cuota:", datos.fechaVenc],
+        ["Aplicación de la quita:", "Al abonar la última cuota"]
     ];
 
     const altoCondiciones = 68;
@@ -796,10 +810,11 @@ function generarPDFQuitaEnCuotas(opcion, datos) {
     y += altoCondiciones + 4;
     y = bloquePago(doc, y, datos.tipo, true);
     y = bloqueTerminos(doc, [
-        "1. Los pagos deben realizarse exclusivamente al CBU informado.",
-        "2. Es obligatorio enviar el comprobante para imputar cada pago.",
-        "3. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
-        "4. Libre deuda: Una vez abonada la última cuota, solicite el libre deuda a hola@Ualá.com.ar."
+        CLAUSULA_PAGO_EN_CUOTAS,
+        CLAUSULA_COMPROBANTE_CUOTAS,
+        "3. La quita se aplica al abonar la última cuota. Si el plan no se completa, el beneficio queda sin efecto y se reclamará el saldo total.",
+        "4. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
+        "5. Libre deuda: Una vez abonada la última cuota, solicite el libre deuda a hola@Ualá.com.ar."
     ], y);
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
@@ -987,6 +1002,7 @@ function copiarChatQuita(id, btn) {
     }
     const mensaje = PropuestaCore.armarMensaje([foto], { nombre: foto.nombre, dni: foto.dni }, { operador: nombreOperador() });
     navigator.clipboard.writeText(mensaje).then(() => {
+        if (window.CasosRecientes) CasosRecientes.registrarEnvio([foto]);
         const original = btn.innerText;
         btn.innerText = "¡Copiado!";
         setTimeout(() => { btn.innerText = original; }, 1000);
@@ -1204,8 +1220,8 @@ function generarPDFCuotas(opcionOcuotas, contextoOValor, datosLegado) {
     if (hayQuita) y -= 3;
 
     const clausulas = [
-        "1. Los pagos deben realizarse exclusivamente al CBU informado.",
-        "2. Es obligatorio enviar el comprobante para imputar el pago.",
+        CLAUSULA_PAGO_EN_CUOTAS,
+        CLAUSULA_COMPROBANTE_CUOTAS,
         "3. La actualización en BCRA depende de los tiempos del organismo (60 días aprox).",
         "4. Este documento es una propuesta de pago sujeta a aprobación final.",
         "5. Libre deuda: Una vez abonada la ultima cuota, solicite el libre deuda a hola@Ualá.com.ar"
@@ -1333,7 +1349,7 @@ function generarPDFPuroManual() {
     const W = 210, M = 20;
     
     // Encabezado global
-    const tituloDoc = "PROPUESTA DE PAGO ÚNICO — PRÉSTAMO";
+    const tituloDoc = tipo === "tarjeta" ? "PROPUESTA DE PAGO ÚNICO — TARJETA" : "PROPUESTA DE PAGO ÚNICO — PRÉSTAMO";
     if (typeof encabezadoPDF === "function") {
         encabezadoPDF(doc, tituloDoc);
     }
@@ -1412,17 +1428,7 @@ function generarPDFPuroManual() {
     // Llamada a los bloques comunes con tipo de producto + flag de quita
     y = bloquePago(doc, y, tipo, conQuita); 
 
-    const clausula4 = "4. Este beneficio aplica exclusivamente a la deuda y al producto identificados en este documento. Durante el proceso de acreditación (72 hs hábiles) no debe utilizarse la cuenta.";
-
-    const clausulas = [
-        "1. El beneficio queda condicionado al pago total del monto acordado antes del vencimiento establecido. Pasada esa fecha, la oferta caduca automáticamente.",
-        "2. El pago debe realizarse exclusivamente al CBU indicado. Pagos a CVU u otras cuentas no serán reconocidos como cancelación del acuerdo.",
-        "3. Una vez acreditado el pago cancelatorio, la deuda quedará saldada en su totalidad. La regularización ante el BCRA/VERAZ ocurre al mes siguiente del pago cancelatorio.",
-        clausula4,
-        "5. Ante cualquier consulta, comunicarse exclusivamente por el canal oficial de gestión Tel: 0800-345-9707 .",
-        "6. Libre deuda: Una vez que verifique que su saldo esta en 0, solicite el libre deuda por mail a hola@Ualá.com.ar"
-    ];
-    y = bloqueTerminos(doc, clausulas, y);
+    y = bloqueTerminos(doc, CLAUSULAS_CANCELACION, y);
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 

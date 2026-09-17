@@ -415,6 +415,7 @@ window.Propuestas = (function () {
       { huboGestionPrevia: huboGestionPrevia(), operador: nombreOperador() }
     );
     navigator.clipboard.writeText(texto).then(function () {
+      if (window.CasosRecientes) window.CasosRecientes.registrarEnvio(fotosActualizadas);
       alert("💬 Propuesta copiada (" + items.length +
         (items.length === 1 ? " opción)" : " opciones)"));
     }).catch(function () {

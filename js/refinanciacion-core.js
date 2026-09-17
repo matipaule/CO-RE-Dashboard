@@ -89,15 +89,17 @@ window.RefinanciacionCore = (function () {
       }
     }
 
+    // Los dos mensajes arrancan con el saldo y los productos, así que los dos los exigen.
+    // El nombre solo es obligatorio en la confirmación: la propuesta saluda igual sin él.
+    if (!(num(datos.montoTotal) > 0)) errores.push("Falta el saldo total a refinanciar.");
+    const productos = (Number(datos.prestamos) || 0) + (Number(datos.cuotificaciones) || 0);
+    if (productos < 1) {
+      errores.push("Cargá al menos un producto: la tarjeta de crédito no se refinancia.");
+    }
+
     if (modo === "confirmacion") {
       if (!String(datos.nombre || "").trim()) {
         errores.push("Falta el nombre y apellido del cliente.");
-      }
-      if (!(num(datos.montoTotal) > 0)) errores.push("Falta el monto total a refinanciar.");
-
-      const productos = (Number(datos.prestamos) || 0) + (Number(datos.cuotificaciones) || 0);
-      if (productos < 1) {
-        errores.push("Cargá al menos un producto: la tarjeta de crédito no se refinancia.");
       }
 
       const dia = num(datos.diaVenc);
@@ -111,17 +113,14 @@ window.RefinanciacionCore = (function () {
     return { ok: errores.length === 0, errores, avisos };
   }
 
-  /** PropuestaCore tiene el mismo formateo pero no lo exporta. Una línea no se comparte a la fuerza. */
-  const pesos = (n) => "$" + Number(n).toLocaleString("es-AR");
+  const importe = (n) => window.PropuestaCore.importe(n);
 
-  /**
-   * El nombre del operador es opcional —vive en un input de localStorage que nadie obliga a
-   * completar—. Sin nombre cambia la despedida entera en vez de dejar "Saludos," colgado.
-   * Mismo criterio que presentacion() en propuesta-core.js.
-   */
-  function firma(operador) {
-    const op = String(operador || "").trim();
-    return op ? "Saludos,\n" + op + " — CO-RE" : "Saludos";
+  function incluye(datos) {
+    const txt = window.PropuestaCore.formatearProductos({
+      prestamos: Number(datos.prestamos) || 0,
+      cuotificaciones: Number(datos.cuotificaciones) || 0,
+    });
+    return txt ? ` (incluye ${txt})` : "";
   }
 
   /**
@@ -130,73 +129,42 @@ window.RefinanciacionCore = (function () {
    * entra sin plan al que imputarlo.
    */
   function armarPropuesta(datos) {
-    return `Hola, ¿cómo estás? ¡Gracias por tu respuesta!
-
-${window.PropuestaCore.PREGUNTA_MOTIVO}
-
-Para ayudarte a regularizar tu crédito, te ofrecemos la siguiente opción de refinanciación:
-
-${datos.cuotas} cuotas de ${pesos(datos.valorCuota)} (IVA incluido).
-Anticipo: ${pesos(datos.anticipo)}, para activar la refinanciación.
-Tasa anual: ${TASA_ANUAL}%.
-Fecha límite de pago: ${formatearFecha(parsearISO(datos.fecha))}.
-
-Si te interesa, confirmame que puedo dejar este mismo número como contacto principal, así te llamo y te explico los próximos pasos.
-
-⚠️ Importante: No debes abonar hasta que confirmemos juntos el acuerdo y realicemos la llamada telefónica de validación. De lo contrario, la refinanciación no podrá aplicarse.
-
-Quedamos atentos a tu confirmación. ¡Muchas gracias!
-
-${window.PropuestaCore.CONSECUENCIAS}
-
-${firma(datos.operador)}`;
+    const saludo = window.PropuestaCore.presentacion(String(datos.nombre || "").trim(), datos.operador);
+    return [
+      `${saludo} ¡Gracias por responder!`,
+      `Te detallo: Saldo actual: ${importe(datos.montoTotal)}${incluye(datos)}, informado en bases crediticias.`,
+      "",
+      `Podés refinanciarlo en ${datos.cuotas} cuotas de ${importe(datos.valorCuota)} (IVA incluido), con tasa anual del ${TASA_ANUAL}%.`,
+      `Anticipo para activarla: ${importe(datos.anticipo)} · Fecha límite: ${formatearFecha(parsearISO(datos.fecha))}.`,
+      "Si te interesa, confirmame que este número sigue siendo tu contacto y te llamo para explicarte los pasos.",
+      window.PropuestaCore.PREGUNTA_MOTIVO,
+      "",
+      "IMPORTANTE: No pagues nada todavía. Primero validamos el acuerdo por teléfono. Si pagás antes, NO podría aplicarse la refinanciación.",
+    ].join("\n");
   }
 
   /**
-   * Segundo mensaje: los términos que el deudor acepta por escrito. Acá sí dice cuántos
-   * productos cubre el acuerdo —la propuesta se mantiene corta a propósito—, porque este es
-   * el mensaje al que después se puede volver a mirar.
-   *
-   * Los bullets son "•" y no "*" porque el asterisco abre negrita en WhatsApp: hoy zafarían
-   * por el espacio que llevan detrás, pero alcanza que alguien edite un renglón.
+   * Segundo mensaje: los términos que el deudor acepta por escrito. Conserva las condiciones
+   * legales (sistema francés, revocación en 10 días hábiles y el "Acepto").
    */
   function armarConfirmacion(datos) {
     const nombre = String(datos.nombre || "").trim();
-    const productos = window.PropuestaCore.formatearProductos({
-      prestamos: Number(datos.prestamos) || 0,
-      cuotificaciones: Number(datos.cuotificaciones) || 0,
-    });
-
-    return `${nombre ? "Hola, " + nombre + "." : "Hola."}
-
-${window.PropuestaCore.PREGUNTA_MOTIVO}
-
-Te comparto los términos de la refinanciación:
-
-Monto total a refinanciar: ${pesos(datos.montoTotal)} (corresponde a ${productos}).
-• Cantidad de cuotas: ${datos.cuotas} cuotas.
-• Valor de cada cuota: ${pesos(datos.valorCuota)}.
-• Tasa anual: ${TASA_ANUAL}%.
-• Anticipo: ${pesos(datos.anticipo)}.
-• Fecha límite para abonar el anticipo: ${formatearFecha(parsearISO(datos.fecha))}.
-• Vencimiento de las cuotas: todos los días ${datos.diaVenc} de cada mes.
-
-Para que la refinanciación pueda llevarse a cabo, deberás abonar el anticipo indicado hasta la fecha mencionada.
-
-Importante: antes de realizar el pago del anticipo, deberás esperar nuestra confirmación. Por favor, no realices el pago hasta que te indiquemos que podés hacerlo.
-
-La refinanciación se realizará mediante el sistema de amortización francés y podrá revocarse hasta 10 días hábiles posteriores a la recepción por mail de los términos y condiciones de la contratación.
-
-Para confirmar la refinanciación, es necesario que envíes por escrito la palabra “Acepto”.
-
-${window.PropuestaCore.CONSECUENCIAS}
-
-${firma(datos.operador)}`;
+    return [
+      `${nombre ? "Hola, " + nombre + "." : "Hola."} Estos son los términos de tu refinanciación:`,
+      `Monto total: ${importe(datos.montoTotal)}${incluye(datos)}.`,
+      `${datos.cuotas} cuotas de ${importe(datos.valorCuota)} · Tasa anual del ${TASA_ANUAL}% · Vencen el día ${datos.diaVenc} de cada mes.`,
+      `Anticipo: ${importe(datos.anticipo)}, a pagar hasta el ${formatearFecha(parsearISO(datos.fecha))}.`,
+      "",
+      "IMPORTANTE: No pagues el anticipo hasta que te confirmemos. Sin ese pago en fecha, NO se activa la refinanciación.",
+      "Se calcula con sistema de amortización francés y podés revocarla hasta 10 días hábiles después de recibir por mail los términos y condiciones.",
+      "",
+      "Para confirmarla, respondé \"Acepto\" por este chat.",
+    ].join("\n");
   }
 
   return {
     TASA_ANUAL, MIN_CUOTAS, HABILES_APROBACION, HABILES_DEFAULT,
     parsearISO, aISO, sumarDiasHabiles, fechaMinima, fechaDefault, formatearFecha,
-    validar, firma, armarPropuesta, armarConfirmacion,
+    validar, armarPropuesta, armarConfirmacion,
   };
 })();
