@@ -496,6 +496,10 @@ select:focus-visible,
     min-width: 140px;
 }
 
+#fdp .fila-productos > div {
+    min-width: min(200px, 100%);
+}
+
 .nota-campo {
     color: var(--text-dim);
     display: block;

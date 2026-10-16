@@ -1327,12 +1327,74 @@ function generarPDFPuroManual() {
         return;
     }
 
-    const opcion = autorizacion.opcion;
-    const formatoManual = (monto) => `$${monto.toLocaleString("es-AR", { minimumFractionDigits: 2 })}`;
-    
-    // Fecha de vencimiento
-    let fechaVencInput = document.getElementById("fechaVencManualInput");
-    let fechaVencStr = fechaVencInput ? fechaVencInput.value : "";
+    generarPDFCancelacionManual({ nombre, dni, tipo, opcion: autorizacion.opcion,
+        fechaVencStr: document.getElementById("fechaVencManualInput")?.value || "" });
+}
+
+function opcionFueraDePauta({ saldoTotal, capital }, quita) {
+    const saldoCentavos = Math.round(saldoTotal * 100);
+    const capitalCentavos = Math.round(capital * 100);
+    if (!Number.isFinite(saldoTotal) || !Number.isFinite(capital) ||
+        !Number.isSafeInteger(saldoCentavos) || !Number.isSafeInteger(capitalCentavos) ||
+        capitalCentavos <= 0 || capitalCentavos > saldoCentavos) {
+        return { ok: false, motivo: "Ingresá saldo total y capital válidos, mayores a cero. El capital no puede superar el saldo total." };
+    }
+    if (!Number.isFinite(quita) || quita < 0 || quita >= 100 || Number(quita.toFixed(2)) !== quita) {
+        return { ok: false, motivo: "Ingresá un descuento sobre capital desde 0% y menor al 100%, con hasta dos decimales." };
+    }
+    // Enteros para que un medio centavo siempre redondee hacia arriba.
+    const factor = BigInt(10000 - Math.round(quita * 100));
+    const pagoCentavos = Number((BigInt(capitalCentavos) * factor + 5000n) / 10000n);
+    if (pagoCentavos <= 0) return { ok: false, motivo: "El monto final a abonar debe ser mayor a cero." };
+    return { ok: true, opcion: {
+        saldoTotal: saldoCentavos / 100, capital: capitalCentavos / 100, quita,
+        interesesCondonados: (saldoCentavos - capitalCentavos) / 100,
+        descuentoCapital: (capitalCentavos - pagoCentavos) / 100,
+        montoTotal: pagoCentavos / 100
+    } };
+}
+
+function actualizarResumenFDP() {
+    const monto = (id) => {
+        const valor = document.getElementById(id).value.trim();
+        if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(valor)) return NaN;
+        return Number(valor.replace(/\./g, "").replace(",", "."));
+    };
+    const porcentaje = document.getElementById("descuentoFDPInput").value.trim();
+    const resultado = opcionFueraDePauta({ saldoTotal: monto("saldoFDPInput"), capital: monto("capitalFDPInput") },
+        porcentaje ? Number(porcentaje) : NaN);
+    const importe = (valor) => `$${valor.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const opcion = resultado.opcion;
+    document.getElementById("resumenFDP").textContent = resultado.ok
+        ? `Intereses condonados (100%): ${importe(opcion.interesesCondonados)}\nDescuento sobre capital: ${opcion.quita}% (${importe(opcion.descuentoCapital)})\nMonto final a abonar: ${importe(opcion.montoTotal)}`
+        : resultado.motivo;
+    return resultado;
+}
+
+function generarPDFFDP() {
+    const nombre = document.getElementById("nombreFDPInput").value.trim();
+    const dni = document.getElementById("dniFDPInput").value.trim();
+    const tipo = document.getElementById("tipoProductoFDP").value;
+    if (!nombre || !dni || !["prestamo", "tarjeta"].includes(tipo)) {
+        alert("Completá el nombre, DNI y tipo de producto del deudor.");
+        return;
+    }
+    const resultado = actualizarResumenFDP();
+    if (!resultado.ok) {
+        alert("❌ ERROR: " + resultado.motivo);
+        return;
+    }
+    const fechaVencStr = document.getElementById("fechaVencFDPInput").value;
+    if (fechaVencStr && (!/^\d{4}-\d{2}-\d{2}$/.test(fechaVencStr) ||
+        isoFechaLocal(new Date(fechaVencStr + "T12:00:00")) !== fechaVencStr)) {
+        alert("Ingresá una fecha de vencimiento válida.");
+        return;
+    }
+    generarPDFCancelacionManual({ nombre, dni, tipo, opcion: resultado.opcion, fechaVencStr, fueraDePauta: true });
+}
+
+function generarPDFCancelacionManual({ nombre, dni, tipo, opcion, fechaVencStr, fueraDePauta = false }) {
+    const formatoManual = (monto) => `$${monto.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     let fechaTexto = "";
     if (fechaVencStr) {
         const partes = fechaVencStr.split("-");
@@ -1353,7 +1415,7 @@ function generarPDFPuroManual() {
     if (typeof encabezadoPDF === "function") {
         encabezadoPDF(doc, tituloDoc);
     }
-    const nroAcuerdo = "MAN-" + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
+    const nroAcuerdo = (fueraDePauta ? "FDP-" : "MAN-") + new Date().getFullYear() + "-" + String(Math.floor(Math.random() * 90000) + 10000);
 
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
@@ -1369,7 +1431,7 @@ function generarPDFPuroManual() {
     doc.setFont("helvetica", "bold");
     doc.text("DATOS DEL TITULAR", M + 6, y + 8);
     doc.setTextColor(255, 255, 255);
-    doc.text(`Nombre: ${nombre.toUpperCase()}`, M + 6, y + 17);
+    doc.text(`Nombre: ${nombre.toUpperCase()}`, M + 6, y + 17, { maxWidth: W - M * 2 - 12 });
     doc.text(`DNI: ${dni}`, M + 6, y + 24);
 
     // La cláusula 7 suma 9 mm al bloque de términos. Se devuelven de fondo vacío, igual que
@@ -1384,7 +1446,7 @@ function generarPDFPuroManual() {
     doc.setTextColor(56, 189, 248);
     doc.text("CONDICIONES DEL ACUERDO", M + 6, y + 8);
 
-    const tipoDesc = "Cancelación con quita";
+    const tipoDesc = fueraDePauta ? "Fuera de pauta (FDP)" : "Cancelación con quita";
 
     const items = [
         ["Tipo:", tipoDesc],
@@ -1432,5 +1494,5 @@ function generarPDFPuroManual() {
     bloqueFiremas(doc, y);
     piePDF(doc, nroAcuerdo);
 
-    doc.save(`Acuerdo_Manual_${nombre.replace(/\s+/g, "_")}.pdf`);
+    doc.save(`Acuerdo_${fueraDePauta ? "FDP" : "Manual"}_${nombre.replace(/\s+/g, "_")}.pdf`);
 }

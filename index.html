@@ -25,6 +25,7 @@
             <li><a href="#" data-seccion="cuotas">Cuotas</a></li>
             <li><a href="#" data-seccion="quitas">Quitas</a></li>
             <li><a href="#" data-seccion="manual">PDF Manual</a></li>
+            <li><a href="#" data-seccion="fdp">PDF FDP</a></li>
             <li><a href="#" data-seccion="refinanciacion">Refinanciación</a></li>
             <li><a href="#" data-seccion="caja">Datos de pago</a></li>
             <li><a href="#" data-seccion="politicas">Politicas</a></li>
@@ -67,6 +68,11 @@
                     <h3>PDF Manual</h3>
                     <p>Generar un acuerdo a medida.</p>
                 </div>
+                <a class="card-acceso" href="#fdp" onclick="navegarA('fdp'); return false;" style="text-decoration: none; color: inherit;">
+                    <span class="icon" aria-hidden="true">📄</span>
+                    <h3>PDF FDP</h3>
+                    <p>Calcular y generar una cancelación fuera de pauta.</p>
+                </a>
                 <div class="card-acceso" onclick="navegarA('refinanciacion')">
                     <span class="icon">🔄</span>
                     <h3>Refinanciación</h3>
@@ -414,6 +420,60 @@
             </div>
         </section>
 
+        <section id="fdp" class="pagina-oculta card">
+            <h2>PDF fuera de pauta (FDP)</h2>
+            <p class="nota-campo">Para descuentos excepcionales ya autorizados. Se condona el 100% de los intereses y se aplica el porcentaje indicado al saldo capital, sin el tope habitual por mora.</p>
+            <form class="input-container" oninput="actualizarResumenFDP()" onsubmit="generarPDFFDP(); return false;">
+                <div class="fila-productos">
+                    <div>
+                        <label for="nombreFDPInput">Nombre del deudor</label>
+                        <input type="text" id="nombreFDPInput" placeholder="Ej: Juan Pérez" maxlength="80" required>
+                    </div>
+                    <div>
+                        <label for="dniFDPInput">DNI</label>
+                        <input type="text" id="dniFDPInput" placeholder="Ej: 35.123.456" inputmode="numeric" maxlength="15" required>
+                    </div>
+                </div>
+                <div>
+                    <label for="tipoProductoFDP">Tipo de producto</label>
+                    <select id="tipoProductoFDP" required>
+                        <option value="prestamo">Préstamo / Cuotificación</option>
+                        <option value="tarjeta">Tarjeta de crédito</option>
+                    </select>
+                </div>
+                <div class="fila-productos">
+                    <div>
+                        <label for="saldoFDPInput">Saldo total actual (con intereses)</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="text" id="saldoFDPInput" placeholder="1.200.000,00" inputmode="decimal" aria-describedby="formatoFDP" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="capitalFDPInput">Saldo capital</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="text" id="capitalFDPInput" placeholder="1.000.000,00" inputmode="decimal" aria-describedby="formatoFDP" required>
+                        </div>
+                    </div>
+                </div>
+                <small id="formatoFDP" class="nota-campo">Montos con punto de miles y coma para centavos, por ejemplo 1.200.000,50.</small>
+                <div class="fila-productos">
+                    <div>
+                        <label for="descuentoFDPInput">Descuento sobre capital (%)</label>
+                        <input type="number" id="descuentoFDPInput" placeholder="Ej: 60" min="0" max="99.99" step="0.01" required>
+                    </div>
+                    <div>
+                        <label for="fechaVencFDPInput">Fecha de vencimiento (opcional)</label>
+                        <input type="date" id="fechaVencFDPInput" aria-describedby="vencimientoFDP">
+                        <small id="vencimientoFDP" class="nota-campo">Si no completás una fecha, vence a 48 hs.</small>
+                    </div>
+                </div>
+                <div id="resumenFDP" class="ayuda-item" role="status" style="white-space: pre-line;">Ingresá el saldo total, el capital y el porcentaje para ver el monto final a abonar.</div>
+                <button type="submit" class="btn-main">📄 GENERAR PDF FDP</button>
+            </form>
+        </section>
+
         <section id="caja" class="pagina-oculta card">
             <h2>🏦 Información de Pago</h2>
             <div class="ayuda-item" style="border-left: 4px solid var(--primary);">
@@ -600,6 +660,7 @@
                         <li><strong>Carrito de propuestas:</strong> aparece abajo cuando sumás opciones. Admite hasta 3 opciones por deuda y no deja armar menús incoherentes: con más cuotas el cliente siempre paga más. Marcá <em>Primer contacto</em> o <em>Ya hubo gestión previa</em> antes de armar el mensaje.</li>
                         <li><strong>Casos recientes:</strong> arriba de Quitas y Cuotas. Guarda los datos de cada cliente que calculaste en las últimas 48 horas, agrupados por día y con la hora del cálculo. Buscá por nombre o DNI (con o sin puntos, sin importar tildes). Cada caso muestra también el <em>último envío</em>: el resumen de lo último que copiaste para ese cliente (no cuenta el PDF). <em>Cargar</em> rellena las dos solapas y recalcula; <em>Borrar</em> saca un caso y <em>Borrar todos</em> vacía la lista (pide un segundo clic).</li>
                         <li><strong>PDF Manual:</strong> acuerdo de cancelación en un pago por un monto a medida. Valida que el monto esté dentro de la quita autorizada para la mora antes de generar el documento.</li>
+                        <li><strong>PDF FDP (fuera de pauta):</strong> para descuentos excepcionales ya autorizados. Cargá el deudor, producto, saldo total, capital, porcentaje de descuento sobre capital y vencimiento. Condona todos los intereses, calcula el pago final y genera el PDF sin aplicar el tope por mora.</li>
                         <li><strong>Refinanciación:</strong> dos pasos. <em>Propuesta</em> (saldo, productos, cuotas, anticipo y fecha límite) y <em>Confirmación</em> (términos que el cliente acepta escribiendo "Acepto"). La fecha límite tiene que dejar al menos 7 días hábiles para la aprobación de Ualá.</li>
                         <li><strong>Datos de pago:</strong> CBU, alias y CUIT para copiar.</li>
                         <li><strong>Políticas</strong> y <strong>FAQ:</strong> resumen rápido de topes y respuestas para el cliente.</li>
