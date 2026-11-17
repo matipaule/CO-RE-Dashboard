@@ -10,7 +10,7 @@ window.Refinanciacion = (function () {
   function monto(id) {
     const v = ($(id) || {}).value || "";
     if (!String(v).trim()) return NaN;
-    return parseFloat(String(v).replace(/\./g, "").replace(",", "."));
+    return window.PropuestaCore.parseMonto(v);
   }
 
   /**

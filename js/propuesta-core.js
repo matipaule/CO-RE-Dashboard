@@ -48,10 +48,29 @@ window.PropuestaCore = (function () {
     return { prioridad: "rojo", motivoPrioridad: "Último recurso: aplica la quita máxima autorizada." };
   }
 
+  /**
+   * Monto escrito por el operador -> número. NaN si no hay ni un dígito.
+   * Acepta "950.000,33", "950000,33", "$ 950.000" y "950000.33": un solo punto seguido de 1 o 2
+   * dígitos y sin coma es decimal (los miles siempre van de a 3).
+   * Antes cada pantalla repetía `replace(/\./g,"")` y "950000.33" se leía como 95.000.033.
+   */
+  function parseMonto(v) {
+    let s = String(v == null ? "" : v).replace(/[^0-9.,-]/g, "");
+    if (s.indexOf(",") === -1 && /^-?\d*\.\d{1,2}$/.test(s)) s = s.replace(".", ",");
+    return parseFloat(s.replace(/\./g, "").replace(",", "."));
+  }
+
+  /**
+   * Todo monto que el deudor tiene que pagar se redondea SIEMPRE hacia arriba al peso entero:
+   * si paga $950.000 y la deuda es $950.000,33 Ualá no la da por cancelada. Se pasa primero por
+   * centavos para que el ruido de coma flotante (70,00000000001) no sume un peso de más.
+   */
+  const pesosArriba = (n) => Math.ceil(Math.round(n * 100) / 100);
+
   function crearOpcion({ modalidad, quita, cuotas, saldoTotal, capital, esPagoTotal = false }) {
     const totalObjetivo = esPagoTotal || modalidad === "cuotas_sin_quita"
-      ? Math.round(saldoTotal)
-      : Math.round(capital * (1 - quita / 100));
+      ? pesosArriba(saldoTotal)
+      : pesosArriba(capital * (1 - quita / 100));
     const valorCuota = Math.ceil(totalObjetivo / cuotas);
     const montoTotal = valorCuota * cuotas;
     const prioridad = esPagoTotal
@@ -63,7 +82,7 @@ window.PropuestaCore = (function () {
       quitaSobreTotal: Math.round((1 - montoTotal / saldoTotal) * 100), cuotas,
       saldoTotal, capital,
       interesesCondonados: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : Math.max(0, saldoTotal - capital),
-      descuentoCapital: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : capital - totalObjetivo,
+      descuentoCapital: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : Math.max(0, capital - totalObjetivo),
       totalObjetivo, valorCuota, montoTotal, cobroInicial: valorCuota,
       recuperacionSobreTotal: montoTotal / saldoTotal * 100,
       prioridad: prioridad.prioridad, motivoPrioridad: prioridad.motivoPrioridad
@@ -466,5 +485,5 @@ window.PropuestaCore = (function () {
   // `fechaVencMasTemprana` se exporta por el mismo motivo: el PDF del carrito la usa para
   // comunicar el MISMO vencimiento que el WhatsApp. Si se saca del export, el acuerdo
   // firmado vuelve a la fecha de su propia foto y las dos piezas se contradicen.
-  return { topeQuitaPorMora, maxCuotasPorSaldo, opcionesCuotas, opcionesQuita, ordenarComercial, mejorPorModalidad, prioridadPara, validarAgregado, MAX_POR_DEUDA, QUITA_EN_CUOTAS, CUOTA_MINIMA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje, importe, PREGUNTA_MOTIVO, PREGUNTA_SEGUIMIENTO };
+  return { parseMonto, pesosArriba, topeQuitaPorMora, maxCuotasPorSaldo, opcionesCuotas, opcionesQuita, ordenarComercial, mejorPorModalidad, prioridadPara, validarAgregado, MAX_POR_DEUDA, QUITA_EN_CUOTAS, CUOTA_MINIMA, formatearProductos, datosCuenta, textoCuenta, presentacion, fechaVencMasTemprana, armarMensaje, importe, PREGUNTA_MOTIVO, PREGUNTA_SEGUIMIENTO };
 })();
