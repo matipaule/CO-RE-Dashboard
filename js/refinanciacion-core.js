@@ -114,6 +114,8 @@ window.RefinanciacionCore = (function () {
   }
 
   const importe = (n) => window.PropuestaCore.importe(n);
+  /** Lo que el deudor paga (cuota, anticipo) sube siempre al peso entero; el saldo es informativo. */
+  const pago = (n) => importe(window.PropuestaCore.pesosArriba(n));
 
   function incluye(datos) {
     const txt = window.PropuestaCore.formatearProductos({
@@ -134,8 +136,8 @@ window.RefinanciacionCore = (function () {
       `${saludo} ¡Gracias por responder!`,
       `Te detallo: Saldo actual: ${importe(datos.montoTotal)}${incluye(datos)}, informado en bases crediticias.`,
       "",
-      `Podés refinanciarlo en ${datos.cuotas} cuotas de ${importe(datos.valorCuota)} (IVA incluido), con tasa anual del ${TASA_ANUAL}%.`,
-      `Anticipo para activarla: ${importe(datos.anticipo)} · Fecha límite: ${formatearFecha(parsearISO(datos.fecha))}.`,
+      `Podés refinanciarlo en ${datos.cuotas} cuotas de ${pago(datos.valorCuota)} (IVA incluido), con tasa anual del ${TASA_ANUAL}%.`,
+      `Anticipo para activarla: ${pago(datos.anticipo)} · Fecha límite: ${formatearFecha(parsearISO(datos.fecha))}.`,
       "Si te interesa, confirmame que este número sigue siendo tu contacto y te llamo para explicarte los pasos.",
       window.PropuestaCore.PREGUNTA_MOTIVO,
       "",
@@ -152,8 +154,8 @@ window.RefinanciacionCore = (function () {
     return [
       `${nombre ? "Hola, " + nombre + "." : "Hola."} Estos son los términos de tu refinanciación:`,
       `Monto total: ${importe(datos.montoTotal)}${incluye(datos)}.`,
-      `${datos.cuotas} cuotas de ${importe(datos.valorCuota)} · Tasa anual del ${TASA_ANUAL}% · Vencen el día ${datos.diaVenc} de cada mes.`,
-      `Anticipo: ${importe(datos.anticipo)}, a pagar hasta el ${formatearFecha(parsearISO(datos.fecha))}.`,
+      `${datos.cuotas} cuotas de ${pago(datos.valorCuota)} · Tasa anual del ${TASA_ANUAL}% · Vencen el día ${datos.diaVenc} de cada mes.`,
+      `Anticipo: ${pago(datos.anticipo)}, a pagar hasta el ${formatearFecha(parsearISO(datos.fecha))}.`,
       "",
       "IMPORTANTE: No pagues el anticipo hasta que te confirmemos. Sin ese pago en fecha, NO se activa la refinanciación.",
       "Se calcula con sistema de amortización francés y podés revocarla hasta 10 días hábiles después de recibir por mail los términos y condiciones.",

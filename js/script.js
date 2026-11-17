@@ -676,7 +676,7 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos, opcion) {
     // Captura de datos: de `datos` si vino, si no de los inputs
     const totalConInteres = datos
         ? datos.totalConInteres
-        : parseFloat((document.getElementById("totalConInteresInput")?.value || "0").replace(/\./g, "").replace(",", ".")) || 0;
+        : PropuestaCore.parseMonto(document.getElementById("totalConInteresInput")?.value || "0") || 0;
     const diasMora = datos ? datos.diasMora : (parseInt(document.getElementById("moraInput")?.value) || 0);
     const ahorroReal = totalConInteres - montoFinal;
     const fechaVenc = datos ? datos.fechaVenc : obtenerFechaVenc("fechaVencInputQuita");
@@ -710,7 +710,7 @@ function generarPDFQuita(montoFinal, porcReal, tipoParam, datos, opcion) {
     ] : [
         ["Tipo:", tipoDesc],
         ["Saldo Total Actual:", "$" + totalConInteres.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
-        ["Monto final a abonar:", "$" + montoFinal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
+        ["Monto final a abonar:", "$" + PropuestaCore.pesosArriba(montoFinal).toLocaleString("es-AR")],
         ["Descuento aplicado:", porcReal + "% sobre el saldo total"],
         ["Importe descontado:", "$" + ahorroReal.toLocaleString("es-AR", { minimumFractionDigits: 2 })],
         ["Vencimiento de la oferta:", fechaVenc],
@@ -1055,7 +1055,7 @@ function generarPDFCuotas(opcionOcuotas, contextoOValor, datosLegado) {
     const dni    = datos ? datos.dni    : (document.getElementById("dniCuotaInput")?.value || "---");
     const saldoTotal = datos
         ? (datos.saldoTotal ?? (opcion && opcion.saldoTotal))
-        : (parseFloat((document.getElementById("saldoInput").value || "0").replace(/\./g, "").replace(",", ".")) || 0);
+        : (PropuestaCore.parseMonto(document.getElementById("saldoInput").value || "0") || 0);
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -1247,12 +1247,14 @@ function opcionManualAutorizada(datos, montoPagar) {
 
     const saldoTotal = Number(datos.saldoTotal);
     const capital = Number(datos.capital);
-    const montoTotal = Math.round(Number(montoPagar) * 100) / 100;
-    const pagoMinimo = Math.round(capital * (1 - tope / 100) * 100) / 100;
-    if (!Number.isFinite(montoTotal) || montoTotal < pagoMinimo || montoTotal > saldoTotal) {
+    // Lo que el deudor transfiere nunca lleva centavos: se sube al peso entero.
+    const montoTotal = PropuestaCore.pesosArriba(Number(montoPagar));
+    const pagoMinimo = PropuestaCore.pesosArriba(capital * (1 - tope / 100));
+    const pagoMaximo = PropuestaCore.pesosArriba(saldoTotal);
+    if (!Number.isFinite(montoTotal) || montoTotal < pagoMinimo || montoTotal > pagoMaximo) {
         return {
             ok: false,
-            motivo: `Para ${datos.diasMora} días de mora, el monto debe estar entre $${pagoMinimo.toLocaleString("es-AR")} y $${saldoTotal.toLocaleString("es-AR")}.`
+            motivo: `Para ${datos.diasMora} días de mora, el monto debe estar entre $${pagoMinimo.toLocaleString("es-AR")} y $${pagoMaximo.toLocaleString("es-AR")}.`
         };
     }
 
@@ -1263,8 +1265,8 @@ function opcionManualAutorizada(datos, montoPagar) {
         id: `pago_unico-manual-${montoTotal}`,
         modalidad: "pago_unico",
         quita,
-        esPagoTotal: montoTotal === saldoTotal,
-        quitaSobreTotal: Number(((1 - montoTotal / saldoTotal) * 100).toFixed(2)),
+        esPagoTotal: montoTotal >= saldoTotal,
+        quitaSobreTotal: Math.max(0, Number(((1 - montoTotal / saldoTotal) * 100).toFixed(2))),
         cuotas: 1,
         saldoTotal,
         capital,
@@ -1307,8 +1309,7 @@ function generarPDFPuroManual() {
 
     // 2. Limpieza EXTREMA de números
     function limpiarPlata(valor) {
-        let sinLetrasNiSignos = valor.replace(/[^0-9.,-]/g, ""); 
-        return parseFloat(sinLetrasNiSignos.replace(/\./g, "").replace(",", "."));
+        return PropuestaCore.parseMonto(valor);
     }
 
     const saldoTotal = limpiarPlata(saldoTotalStr);
@@ -1344,13 +1345,15 @@ function opcionFueraDePauta({ saldoTotal, capital }, quita) {
     }
     // Enteros para que un medio centavo siempre redondee hacia arriba.
     const factor = BigInt(10000 - Math.round(quita * 100));
+    // Lo que paga el deudor sube siempre al peso entero (ver PropuestaCore.pesosArriba).
     const pagoCentavos = Number((BigInt(capitalCentavos) * factor + 5000n) / 10000n);
-    if (pagoCentavos <= 0) return { ok: false, motivo: "El monto final a abonar debe ser mayor a cero." };
+    const pagoPesos = PropuestaCore.pesosArriba(pagoCentavos / 100);
+    if (pagoPesos <= 0) return { ok: false, motivo: "El monto final a abonar debe ser mayor a cero." };
     return { ok: true, opcion: {
         saldoTotal: saldoCentavos / 100, capital: capitalCentavos / 100, quita,
         interesesCondonados: (saldoCentavos - capitalCentavos) / 100,
-        descuentoCapital: (capitalCentavos - pagoCentavos) / 100,
-        montoTotal: pagoCentavos / 100
+        descuentoCapital: Math.max(0, capitalCentavos / 100 - pagoPesos),
+        montoTotal: pagoPesos
     } };
 }
 
@@ -1358,7 +1361,7 @@ function actualizarResumenFDP() {
     const monto = (id) => {
         const valor = document.getElementById(id).value.trim();
         if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(valor)) return NaN;
-        return Number(valor.replace(/\./g, "").replace(",", "."));
+        return PropuestaCore.parseMonto(valor);
     };
     const porcentaje = document.getElementById("descuentoFDPInput").value.trim();
     const resultado = opcionFueraDePauta({ saldoTotal: monto("saldoFDPInput"), capital: monto("capitalFDPInput") },
@@ -1366,7 +1369,7 @@ function actualizarResumenFDP() {
     const importe = (valor) => `$${valor.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const opcion = resultado.opcion;
     document.getElementById("resumenFDP").textContent = resultado.ok
-        ? `Intereses condonados (100%): ${importe(opcion.interesesCondonados)}\nDescuento sobre capital: ${opcion.quita}% (${importe(opcion.descuentoCapital)})\nMonto final a abonar: ${importe(opcion.montoTotal)}`
+        ? `Intereses condonados (100%): ${importe(opcion.interesesCondonados)}\nDescuento sobre capital: ${opcion.quita}% (${importe(opcion.descuentoCapital)})\nMonto final a abonar: $${opcion.montoTotal.toLocaleString("es-AR")}`
         : resultado.motivo;
     return resultado;
 }
@@ -1454,7 +1457,7 @@ function generarPDFCancelacionManual({ nombre, dni, tipo, opcion, fechaVencStr, 
         ["Saldo capital:", formatoManual(opcion.capital)],
         ["Intereses condonados:", formatoManual(opcion.interesesCondonados)],
         ["Descuento sobre capital:", `${opcion.quita}% (${formatoManual(opcion.descuentoCapital)})`],
-        ["Monto final a abonar:", formatoManual(opcion.montoTotal)],
+        ["Monto final a abonar:", `$${opcion.montoTotal.toLocaleString("es-AR")}`],
         ["Vencimiento:", fechaTexto]
     ];
 

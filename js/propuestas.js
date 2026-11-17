@@ -43,7 +43,7 @@ window.Propuestas = (function () {
 
   const num = (id) => {
     const v = (document.getElementById(id) || {}).value || "0";
-    return parseFloat(String(v).replace(/\./g, "").replace(",", ".")) || 0;
+    return window.PropuestaCore.parseMonto(v) || 0;
   };
 
   const entero = (id) => parseInt((document.getElementById(id) || {}).value, 10) || 0;
