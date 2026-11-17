@@ -82,7 +82,7 @@ window.PropuestaCore = (function () {
       quitaSobreTotal: Math.round((1 - montoTotal / saldoTotal) * 100), cuotas,
       saldoTotal, capital,
       interesesCondonados: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : Math.max(0, saldoTotal - capital),
-      descuentoCapital: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : capital - totalObjetivo,
+      descuentoCapital: esPagoTotal || modalidad === "cuotas_sin_quita" ? 0 : Math.max(0, capital - totalObjetivo),
       totalObjetivo, valorCuota, montoTotal, cobroInicial: valorCuota,
       recuperacionSobreTotal: montoTotal / saldoTotal * 100,
       prioridad: prioridad.prioridad, motivoPrioridad: prioridad.motivoPrioridad
