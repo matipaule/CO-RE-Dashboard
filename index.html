@@ -422,7 +422,7 @@
 
         <section id="fdp" class="pagina-oculta card">
             <h2>PDF fuera de pauta (FDP)</h2>
-            <p class="nota-campo">Para descuentos excepcionales ya autorizados. Se condona el 100% de los intereses y se aplica el porcentaje indicado al saldo capital, sin el tope habitual por mora.</p>
+            <p class="nota-campo">Para descuentos excepcionales ya autorizados. Se cobra el monto que aprobó el banco, sin el tope habitual por mora; el descuento se calcula solo.</p>
             <form class="input-container" oninput="actualizarResumenFDP()" onsubmit="generarPDFFDP(); return false;">
                 <div class="fila-productos">
                     <div>
@@ -460,8 +460,11 @@
                 <small id="formatoFDP" class="nota-campo">Montos con punto de miles y coma para centavos, por ejemplo 1.200.000,50.</small>
                 <div class="fila-productos">
                     <div>
-                        <label for="descuentoFDPInput">Descuento sobre capital (%)</label>
-                        <input type="number" id="descuentoFDPInput" placeholder="Ej: 60" min="0" max="99.99" step="0.01" required>
+                        <label for="montoFDPInput">Monto aprobado por el banco</label>
+                        <div class="input-wrapper">
+                            <span class="currency-symbol">$</span>
+                            <input type="text" id="montoFDPInput" placeholder="400.000" inputmode="decimal" aria-describedby="formatoFDP" required style="padding-left: 45px;">
+                        </div>
                     </div>
                     <div>
                         <label for="fechaVencFDPInput">Fecha de vencimiento (opcional)</label>
@@ -469,7 +472,7 @@
                         <small id="vencimientoFDP" class="nota-campo">Si no completás una fecha, vence a 48 hs.</small>
                     </div>
                 </div>
-                <div id="resumenFDP" class="ayuda-item" role="status" style="white-space: pre-line;">Ingresá el saldo total, el capital y el porcentaje para ver el monto final a abonar.</div>
+                <div id="resumenFDP" class="ayuda-item" role="status" style="white-space: pre-line;">Ingresá el saldo total, el capital y el monto aprobado para ver el resumen del acuerdo.</div>
                 <button type="submit" class="btn-main">📄 GENERAR PDF FDP</button>
             </form>
         </section>

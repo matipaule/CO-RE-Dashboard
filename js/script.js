@@ -1332,27 +1332,23 @@ function generarPDFPuroManual() {
         fechaVencStr: document.getElementById("fechaVencManualInput")?.value || "" });
 }
 
-function opcionFueraDePauta({ saldoTotal, capital }, quita) {
-    const saldoCentavos = Math.round(saldoTotal * 100);
-    const capitalCentavos = Math.round(capital * 100);
-    if (!Number.isFinite(saldoTotal) || !Number.isFinite(capital) ||
-        !Number.isSafeInteger(saldoCentavos) || !Number.isSafeInteger(capitalCentavos) ||
-        capitalCentavos <= 0 || capitalCentavos > saldoCentavos) {
+// En FDP manda el monto que aprobó el banco: el descuento y los intereses condonados salen de él.
+function opcionFueraDePauta({ saldoTotal, capital }, montoAprobado) {
+    if (!Number.isFinite(saldoTotal) || !Number.isFinite(capital) || capital <= 0 || capital > saldoTotal) {
         return { ok: false, motivo: "Ingresá saldo total y capital válidos, mayores a cero. El capital no puede superar el saldo total." };
     }
-    if (!Number.isFinite(quita) || quita < 0 || quita >= 100 || Number(quita.toFixed(2)) !== quita) {
-        return { ok: false, motivo: "Ingresá un descuento sobre capital desde 0% y menor al 100%, con hasta dos decimales." };
-    }
-    // Enteros para que un medio centavo siempre redondee hacia arriba.
-    const factor = BigInt(10000 - Math.round(quita * 100));
     // Lo que paga el deudor sube siempre al peso entero (ver PropuestaCore.pesosArriba).
-    const pagoCentavos = Number((BigInt(capitalCentavos) * factor + 5000n) / 10000n);
-    const pagoPesos = PropuestaCore.pesosArriba(pagoCentavos / 100);
-    if (pagoPesos <= 0) return { ok: false, motivo: "El monto final a abonar debe ser mayor a cero." };
+    const pagoPesos = PropuestaCore.pesosArriba(montoAprobado);
+    const maximo = PropuestaCore.pesosArriba(saldoTotal);
+    if (!Number.isFinite(pagoPesos) || pagoPesos <= 0 || pagoPesos > maximo) {
+        return { ok: false, motivo: `Ingresá el monto aprobado: mayor a cero y hasta $${maximo.toLocaleString("es-AR")} (el saldo total).` };
+    }
+    const descuentoCapital = Math.max(0, capital - pagoPesos);
     return { ok: true, opcion: {
-        saldoTotal: saldoCentavos / 100, capital: capitalCentavos / 100, quita,
-        interesesCondonados: (saldoCentavos - capitalCentavos) / 100,
-        descuentoCapital: Math.max(0, capitalCentavos / 100 - pagoPesos),
+        saldoTotal, capital,
+        quita: Number((descuentoCapital / capital * 100).toFixed(2)),
+        interesesCondonados: Math.max(0, saldoTotal - Math.max(capital, pagoPesos)),
+        descuentoCapital,
         montoTotal: pagoPesos
     } };
 }
@@ -1363,13 +1359,12 @@ function actualizarResumenFDP() {
         if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d{1,2})?$/.test(valor)) return NaN;
         return PropuestaCore.parseMonto(valor);
     };
-    const porcentaje = document.getElementById("descuentoFDPInput").value.trim();
     const resultado = opcionFueraDePauta({ saldoTotal: monto("saldoFDPInput"), capital: monto("capitalFDPInput") },
-        porcentaje ? Number(porcentaje) : NaN);
+        monto("montoFDPInput"));
     const importe = (valor) => `$${valor.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const opcion = resultado.opcion;
     document.getElementById("resumenFDP").textContent = resultado.ok
-        ? `Intereses condonados (100%): ${importe(opcion.interesesCondonados)}\nDescuento sobre capital: ${opcion.quita}% (${importe(opcion.descuentoCapital)})\nMonto final a abonar: $${opcion.montoTotal.toLocaleString("es-AR")}`
+        ? `Monto final a abonar: $${opcion.montoTotal.toLocaleString("es-AR")}\nIntereses condonados: ${importe(opcion.interesesCondonados)}\nDescuento sobre capital: ${opcion.quita}% (${importe(opcion.descuentoCapital)})`
         : resultado.motivo;
     return resultado;
 }
